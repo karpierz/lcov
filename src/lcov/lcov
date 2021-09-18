@@ -2028,38 +2028,6 @@ def write_info_file(*INFO_HANDLE $) -> Tuple[int, int, int, int, int, int]:
             br_total_found, br_total_hit)
 
 # NOK
-def transform_pattern(pattern) -> str:
-    # transform_pattern(pattern)
-    #
-    # Transform shell wildcard expression to equivalent Perl regular expression.
-    # Return transformed pattern.
-
-    # Escape special chars
-
-    $pattern =~ s/\\/\\\\/g;
-    $pattern =~ s/\//\\\//g;
-    $pattern =~ s/\^/\\\^/g;
-    $pattern =~ s/\$/\\\$/g;
-    $pattern =~ s/\(/\\\(/g;
-    $pattern =~ s/\)/\\\)/g;
-    $pattern =~ s/\[/\\\[/g;
-    $pattern =~ s/\]/\\\]/g;
-    $pattern =~ s/\{/\\\{/g;
-    $pattern =~ s/\}/\\\}/g;
-    $pattern =~ s/\./\\\./g;
-    $pattern =~ s/\,/\\\,/g;
-    $pattern =~ s/\|/\\\|/g;
-    $pattern =~ s/\+/\\\+/g;
-    $pattern =~ s/\!/\\\!/g;
-
-    # Transform ? => (.) and * => (.*)
-
-    $pattern =~ s/\*/\(\.\*\)/g;
-    $pattern =~ s/\?/\(\.\)/g;
-
-    return pattern
-
-# NOK
 def extract() -> Tuple[int, int, int, int, int, int]:
     """ """
     global data_to_stdout

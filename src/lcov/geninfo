@@ -545,34 +545,6 @@ For more information see: {lcov_url}
 """)
 
 # NOK
-def transform_pattern($pattern: str) -> str:
-    # Transform shell wildcard expression to equivalent Perl regular expression.
-    # Return transformed pattern.
-
-    # Escape special chars
-    $pattern =~ s/\\/\\\\/g;
-    $pattern =~ s/\//\\\//g;
-    $pattern =~ s/\^/\\\^/g;
-    $pattern =~ s/\$/\\\$/g;
-    $pattern =~ s/\(/\\\(/g;
-    $pattern =~ s/\)/\\\)/g;
-    $pattern =~ s/\[/\\\[/g;
-    $pattern =~ s/\]/\\\]/g;
-    $pattern =~ s/\{/\\\{/g;
-    $pattern =~ s/\}/\\\}/g;
-    $pattern =~ s/\./\\\./g;
-    $pattern =~ s/\,/\\\,/g;
-    $pattern =~ s/\|/\\\|/g;
-    $pattern =~ s/\+/\\\+/g;
-    $pattern =~ s/\!/\\\!/g;
-
-    # Transform ? => (.) and * => (.*)
-    $pattern =~ s/\*/\(\.\*\)/g;
-    $pattern =~ s/\?/\(\.\)/g;
-
-    return $pattern
-
-# NOK
 def get_common_prefix($min_dir, @files):
     # get_common_prefix(min_dir, filenames)
     #

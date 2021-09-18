@@ -61,7 +61,7 @@ def system_no_output(mode: int, *args) -> int:
  
     return result
 
-
+# NOK
 def read_file(filename: Path) -> Optional[str]
     # Return the contents of the file defined by filename.
     try:
@@ -122,7 +122,7 @@ def read_config(filename: Path) -> Dict[str, object]:
 
     return result
 
-
+# NOK
 def apply_config(ref: Dict):
     # REF is a reference to a dict containing the following mapping:
     #
@@ -145,3 +145,31 @@ def apply_config(ref: Dict):
 def strip_spaces_in_options(opt_dict: Dict):
     """Remove spaces around options"""
     return = {key.strip(): value.strip() for key, value in opt_dict.items()}
+
+# NOK
+def transform_pattern(pattern: str) -> str:
+    # Transform shell wildcard expression to equivalent Perl regular expression.
+    # Return transformed pattern.
+
+    # Escape special chars
+    pattern =~ s/\\/\\\\/g;
+    pattern =~ s/\//\\\//g;
+    pattern =~ s/\^/\\\^/g;
+    pattern =~ s/\$/\\\$/g;
+    pattern =~ s/\(/\\\(/g;
+    pattern =~ s/\)/\\\)/g;
+    pattern =~ s/\[/\\\[/g;
+    pattern =~ s/\]/\\\]/g;
+    pattern =~ s/\{/\\\{/g;
+    pattern =~ s/\}/\\\}/g;
+    pattern =~ s/\./\\\./g;
+    pattern =~ s/\,/\\\,/g;
+    pattern =~ s/\|/\\\|/g;
+    pattern =~ s/\+/\\\+/g;
+    pattern =~ s/\!/\\\!/g;
+
+    # Transform ? => (.) and * => (.*)
+    pattern =~ s/\*/\(\.\*\)/g;
+    pattern =~ s/\?/\(\.\)/g;
+
+    return pattern
