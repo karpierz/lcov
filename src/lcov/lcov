@@ -111,8 +111,8 @@ sub diff();
 from .util import write_file
 from .util import apply_config
 sub info(@);
-sub transform_pattern($);
 sub rate($$;$$$);
+from .util import transform_pattern
 from .util import system_no_output
 
 # Global variables & initialization

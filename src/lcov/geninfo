@@ -147,8 +147,8 @@ UNNAMED_BLOCK = -1
 
 # Prototypes
 from .util import strip_spaces_in_options
+from .util import transform_pattern
 sub print_usage(*);
-sub transform_pattern($);
 sub match_filename($@);
 sub solve_ambiguous_match($$$);
 sub solve_relative_path($$);
