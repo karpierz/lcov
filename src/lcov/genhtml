@@ -3080,7 +3080,7 @@ def write_source_line($handle, $line, $source, $count, $converted, $brdata):
 
     return($result);
 
-
+# NOK
 def write_source_epilog(filehandle):
     # Write end of source code table.
     #
@@ -3088,17 +3088,15 @@ def write_source_epilog(filehandle):
     write_html(filehandle, <<END_OF_HTML)
 END_OF_HTML
 
-
-#
-# write_html_epilog(filehandle, base_dir[, break_frames])
-#
-# Write HTML page footer to FILEHANDLE. BREAK_FRAMES should be set when
-# this page is embedded in a frameset, clicking the URL link will then
-# break this frameset.
-#
-
+# NOK
 sub write_html_epilog(*$;$)
 {
+    # write_html_epilog(filehandle, base_dir[, break_frames])
+    #
+    # Write HTML page footer to FILEHANDLE. BREAK_FRAMES should be set when
+    # this page is embedded in a frameset, clicking the URL link will then
+    # break this frameset.
+
     my $basedir = $_[1];
     my $break_code = "";
     my $epilog;
@@ -3123,16 +3121,11 @@ END_OF_HTML
     epilog =~ s/\@basedir\@/$basedir/g
 
     write_html($_[0], epilog)
-}
 
-
-#
-# write_frameset(filehandle, basedir, basename, pagetitle)
-#
-#
-
+# NOK
 sub write_frameset(*$$$)
-{
+    # write_frameset(filehandle, basedir, basename, pagetitle)
+
     my $frame_width = $overview_width + 40;
 
     # *************************************************************
@@ -3161,11 +3154,10 @@ END_OF_HTML
     ;
 
     # *************************************************************
-}
 
-
+# NOK
 def write_overview_line(filehandle, basename, line, link   *$$$):
-{
+
     my $y1 = $_[2] - 1;
     my $y2 = $y1 + $nav_resolution - 1;
     my $x2 = $overview_width - 1;
@@ -3176,9 +3168,9 @@ def write_overview_line(filehandle, basename, line, link   *$$$):
         <area shape="rect" coords="0,$y1,$x2,$y2" href="$_[1].gcov.$html_ext#$_[3]" target="source" alt="overview">
 END_OF_HTML
 
-
+# NOK
 def write_overview(filehandle, basedir, basename, pagetitle, lines   *$$$$):
-{
+
     my $index;
     my $max_line = $_[4] - 1;
     my $offset;
@@ -3231,18 +3223,8 @@ END_OF_HTML
     </html>
 END_OF_HTML
 
-
-#
-# write_header(filehandle, type, trunc_file_name, rel_file_name, ln_found,
-# ln_hit, funcs_found, funcs_hit, sort_type)
-#
-# Write a complete standard page header. TYPE may be (0, 1, 2, 3, 4)
-# corresponding to (directory view header, file view header, source view
-# header, test case description header, function view header)
-#
-
-sub write_header(HTML_HANDLE, $$$$$$$$$$)
-{
+# NOK
+def write_header(HTML_HANDLE, $$$$$$$$$$):
     my $type = $_[1];
     my $trunc_name = $_[2];
     my $rel_filename = $_[3];
@@ -3253,6 +3235,14 @@ sub write_header(HTML_HANDLE, $$$$$$$$$$)
     my $br_found = $_[8];
     my $br_hit = $_[9];
     my $sort_type = $_[10];
+
+    # write_header(filehandle, type, trunc_file_name, rel_file_name, ln_found,
+    # ln_hit, funcs_found, funcs_hit, sort_type)
+    #
+    # Write a complete standard page header. TYPE may be (0, 1, 2, 3, 4)
+    # corresponding to (directory view header, file view header, source view
+    # header, test case description header, function view header)
+
     my $base_dir;
     my $view;
     my $test;
@@ -3451,9 +3441,8 @@ END_OF_HTML
 
     # Fourth line
     write_header_epilog(HTML_HANDLE, $base_dir)
-}
 
-
+# NOK
 def get_sorted_by_rate($hash, $type):
 
     if ($type == $SORT_LINE) {
@@ -3467,7 +3456,7 @@ def get_sorted_by_rate($hash, $type):
         return sorted({$hash->{$a}[9] <=> $hash->{$b}[9]} keys(%{$hash}))
     }
 
-
+# NOK
 def get_sorted_by_missed($hash, $type):
 
     if ($type == $SORT_LINE) {
@@ -3493,26 +3482,22 @@ def get_sorted_by_missed($hash, $type):
             } keys(%{$hash}));
     }
 
-#
-# get_sorted_keys(hash_ref, sort_type)
-#
-# hash_ref: filename -> stats
-# stats: [ ln_found, ln_hit, fn_found, fn_hit, br_found, br_hit,
-#          link_name, line_rate, fn_rate, br_rate ]
-#
-
+# NOK
 def get_sorted_keys($hash, $type):
-
-    if ($type == $SORT_FILE) {
+    # get_sorted_keys(hash_ref, sort_type)
+    #
+    # hash_ref: filename -> stats
+    # stats: [ ln_found, ln_hit, fn_found, fn_hit, br_found, br_hit,
+    #          link_name, line_rate, fn_rate, br_rate ]
+    if $type == $SORT_FILE:
         # Sort by name
         return sorted(keys(%{$hash}))
-    } elsif ($opt_missed) {
+    elif $opt_missed:
         return get_sorted_by_missed($hash, $type);
     else:
         return get_sorted_by_rate($hash, $type);
-    }
 
-
+# NOK
 def get_sort_code($link, $alt, $base):
 
     my $png;
@@ -3533,7 +3518,7 @@ def get_sort_code($link, $alt, $base):
            '<img src="'.$base.$png.'" width=10 height=14 '.
            'alt="'.$alt.'" title="'.$alt.'" border=0>'.$link_end.'</span>';
 
-
+# NOK
 def get_file_code($type, $text, $sort_button, $base):
 
     my $result = $text;
@@ -3550,7 +3535,7 @@ def get_file_code($type, $text, $sort_button, $base):
 
     return $result
 
-
+# NOK
 def get_line_code($type, $sort_type, $text, $sort_button, $base):
 
     my $result = $text;
@@ -3583,7 +3568,7 @@ def get_line_code($type, $sort_type, $text, $sort_button, $base):
 
     return $result;
 
-
+# NOK
 def get_func_code($type, $text, $sort_button, $base):
 
     my $result = $text;
@@ -3597,7 +3582,7 @@ def get_func_code($type, $text, $sort_button, $base):
 
     return $result;
 
-
+# NOK
 def get_br_code($type, $text, $sort_button, $base):
 
     my $result = $text;
@@ -3611,29 +3596,8 @@ def get_br_code($type, $text, $sort_button, $base):
 
     return $result
 
-
-#
-# write_file_table(filehandle, base_dir, overview, testhash, testfnchash,
-#                  testbrhash, fileview, sort_type)
-#
-# Write a complete file table. OVERVIEW is a reference to a hash containing
-# the following mapping:
-#
-#   filename -> "ln_found,ln_hit,funcs_found,funcs_hit,page_link,
-#         func_link"
-#
-# TESTHASH is a reference to the following hash:
-#
-#   filename -> \%testdata
-#   %testdata: name of test affecting this file -> \%testcount
-#   %testcount: line number -> execution count for a single test
-#
-# Heading of first column is "Filename" if FILEVIEW is true, "Directory name"
-# otherwise.
-#
-
-sub write_file_table(HTML_HANDLE, $$$$$$$):
-{
+# NOK
+def write_file_table(HTML_HANDLE, $$$$$$$):
     my $base_dir = $_[1];
     my $overview = $_[2];
     my $testhash = $_[3];
@@ -3641,6 +3605,25 @@ sub write_file_table(HTML_HANDLE, $$$$$$$):
     my $testbrhash = $_[5];
     my $fileview = $_[6];
     my $sort_type = $_[7];
+
+    # write_file_table(filehandle, base_dir, overview, testhash, testfnchash,
+    #                  testbrhash, fileview, sort_type)
+    #
+    # Write a complete file table. OVERVIEW is a reference to a hash containing
+    # the following mapping:
+    #
+    #   filename -> "ln_found,ln_hit,funcs_found,funcs_hit,page_link,
+    #         func_link"
+    #
+    # TESTHASH is a reference to the following hash:
+    #
+    #   filename -> \%testdata
+    #   %testdata: name of test affecting this file -> \%testcount
+    #   %testcount: line number -> execution count for a single test
+    #
+    # Heading of first column is "Filename" if FILEVIEW is true, "Directory name"
+    # otherwise.
+
     my $filename;
     my $bar_graph;
     my $hit;
@@ -3777,7 +3760,7 @@ def get_line_found_and_hit(dict: Dict[int, int]) -> Tuple[int, int]:
     hit   = sum(1 for value in dict.values() if value > 0)
     return found, hit
 
-
+# NOK
 def get_affecting_tests(testdata: Dict, testfncdata: Dict, testbrdata: Dict) -> Dict:
     # HASHREF contains a mapping filename -> (linenumber -> exec count).
     # Return a hash containing mapping filename -> "lines found, lines hit"
@@ -3800,12 +3783,7 @@ def get_affecting_tests(testdata: Dict, testfncdata: Dict, testbrdata: Dict) -> 
 
     return result
 
-
-#
-# write_source(filehandle, source_filename, count_data, checksum_data,
-#              converted_data, func_data, sumbrcount)
-#
-
+# NOK
 def write_source(HTML_HANDLE,
                  $source_filename,
                  $, 
@@ -3813,11 +3791,13 @@ def write_source(HTML_HANDLE,
                  $converted,
                  $funcdata,
                  $sumbrcount) -> List:
+    # write_source(filehandle, source_filename, count_data, checksum_data,
+    #              converted_data, func_data, sumbrcount)
+    #
     # Write an HTML view of a source code file. Returns a list containing
     # data as needed by gen_png().
     #
     # Die on error.
-    #
 
     my $datafunc = reverse_dict(funcdata)
     my @file;
@@ -3876,7 +3856,7 @@ def write_source(HTML_HANDLE,
 
     return result
 
-
+# NOK
 def funcview_get_func_code($name, $base, sort_type: int) -> str:
     global html_ext
 
@@ -3889,7 +3869,7 @@ def funcview_get_func_code($name, $base, sort_type: int) -> str:
 
     return result
 
-
+# NOK
 def funcview_get_count_code($name, $base, sort_type: int) -> str:
     global html_ext
 
@@ -3902,7 +3882,7 @@ def funcview_get_count_code($name, $base, sort_type: int) -> str:
 
     return result
 
-
+# NOK
 def funcview_get_sorted($funcdata, $sumfncdata, sort_type: int):
     # Depending on the value of sort_type, return a list of functions sorted
     # by name (sort_type 0) or by the associated call count (sort_type 1).
@@ -3913,10 +3893,9 @@ def funcview_get_sorted($funcdata, $sumfncdata, sort_type: int):
                         ? $a cmp $b : $sumfncdata->{$a} <=> $sumfncdata->{$b}
                       } keys(%{$sumfncdata}))
 
+# NOK
+def demangle_list($list):
 
-sub demangle_list($)
-{
-    my ($list) = @_;
     my $tmpfile;
     my $handle;
     my %demangle;
@@ -3961,9 +3940,8 @@ sub demangle_list($)
         warn("WARNING: could not remove temporary file $tmpfile: $!\n");
 
     return \%demangle;
-}
 
-
+# NOK
 def write_function_table(HTML_HANDLE,
                          $source,
                          $sumcount,   $funcdata,
@@ -4036,7 +4014,7 @@ END_OF_HTML
       </center>
 END_OF_HTML
 
-
+# NOK
 def info(printf_parameter):
     # Use printf to write PRINTF_PARAMETER to stdout only when
     # the $quiet flag is not set.
@@ -4094,7 +4072,7 @@ def subtract_fnccounts(data: Dict[object, int],
 
     return (data, fn_found, fn_hit)
 
-
+# NOK
 def apply_baseline(%data_hash, %base_hash):
     # Subtract the execution counts found in the baseline hash
     # referenced by BASELINE_REF from actual data in DATA_REF.
@@ -4184,7 +4162,7 @@ def apply_baseline(%data_hash, %base_hash):
 
     return (\%data_hash);
 
-
+# NOK
 def remove_unused_descriptions():
     # Removes all test descriptions from the global hash %test_description
     # which are not present in %info_data.
@@ -4213,7 +4191,7 @@ def remove_unused_descriptions():
         info("Removed {} unused descriptions, {} remaining.\n".format(
              (before - after), after))
 
-
+# NOK
 def apply_prefix(filename, prefixes: List):
     # If FILENAME begins with PREFIX from PREFIXES,
     # remove PREFIX from FILENAME and return resulting string,
@@ -4250,7 +4228,7 @@ def get_html_epilog(filename: Optional[Path] = None):
     exept:
         die(f"ERROR: cannot open html epilog {filename}!\n")
 
-
+# NOK
 def parse_ignore_errors(ignore_errors: Optional[List]):
     """Parse user input about which errors to ignore."""
     global ignore
