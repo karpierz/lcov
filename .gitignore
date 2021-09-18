@@ -1,0 +1,11 @@
+/.tox/
+/build/
+/dist/
+*.egg-info
+*.py[cod]
+__pycache__
+
+.version
+*.gcda
+*.gcno
+*.info
