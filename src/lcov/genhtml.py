@@ -49,7 +49,6 @@ genhtml
 #use strict;
 #use warnings;
 use File::Basename;
-use File::Temp qw(tempfile);
 use Getopt::Long;
 use Digest::MD5 qw(md5_base64);
 use Cwd qw/abs_path cwd/;
@@ -470,8 +469,7 @@ if $default_precision < 1 or $default_precision > 4:
 
 # Make sure output_directory exists, create it if necessary
 if $output_directory:
-    if not Path($output_directory).exists():
-        create_sub_dir(Path($output_directory))
+    create_sub_dir(Path($output_directory), exist_ok=True)
 
 # Do something
 gen_html()
@@ -3607,12 +3605,12 @@ def parse_dir_prefix(prefixes: Optional[List]):
 
 # NOK
 def demangle_list(func_list: List[str]) -> Dict[str, str]:
-
+    """ """
     global options
 
     # Write function names to file
     try:
-        fhandle, tmpfile = tempfile()
+        fhandle, tmpfile = tempfile.mkstemp(text=False)
     except Exception as exc:
         die("ERROR: could not create temporary file")
     with fhandle:
@@ -3665,14 +3663,16 @@ def get_rate(found: int, hit: int) -> int:
     else:
         return int(hit * 1000 / found) * 10 + 2 - (1 / found)
 
-# NOK
-def create_sub_dir($dir: Path):
-    # Create subdirectory DIR if it does not already exist,
-    # including all its parent directories.
-    #
-    # Die on error.
-    #
-    system("mkdir", "-p", str($dir))
+
+def create_sub_dir(dir: Path, *, exist_ok=False):
+    """Create subdirectory dir if it does not already exist,
+    including all its parent directories.
+
+    Die on error.
+    """
+    try:
+        dir.mkdir(parents=True, exist_ok=exist_ok)
+    except:
         and die(f"ERROR: cannot create directory {dir}!\n")
 
 def main(argv=sys.argv[1:]):

@@ -36,7 +36,7 @@ geninfo
 use File::Basename; 
 use File::Spec::Functions qw /abs2rel catdir file_name_is_absolute splitdir
                   splitpath catpath/;
-use File::Temp qw(tempfile tempdir);
+use File::Temp qw(tempdir);
 use File::Copy qw(copy);
 use Getopt::Long;
 use Digest::MD5 qw(md5_base64);
