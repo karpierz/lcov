@@ -63,9 +63,8 @@ from .util import reverse_dict
 
 # Global constants
 tool_name    = Path(__file__).stem
-our $tool_dir        = abs_path(dirname($0));
-our $lcov_version    = 'LCOV version '.`$tool_dir/get_version.sh --full`;
-our $lcov_url        = "http://ltp.sourceforge.net/coverage/lcov.php";
+lcov_version = "LCOV version " #+ `${abs_path(dirname($0))}/get_version.sh --full`
+lcov_url     = "http://ltp.sourceforge.net/coverage/lcov.php"
 
 # Specify coverage rate default precision
 default_precision = 1
@@ -997,8 +996,8 @@ def link_data_cb($datadir: Path, $rel, $graphdir: Path):
 
     try:
         symlink($abs_from, $abs_to)
-    except:
-        or die(f"ERROR: could not create symlink at {abs_to}: $!\n")
+    except Exception as exc:
+        or die(f"ERROR: could not create symlink at {abs_to}: {exc}\n")
 
 # NOK
 def unlink_data_cb($datadir: Path, $rel, $graphdir: Path):

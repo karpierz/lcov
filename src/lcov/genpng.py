@@ -23,7 +23,7 @@ from pathlib import Path
 
 # Constants
 tool_name    = Path(__file__).stem
-lcov_version = "LCOV version " #+ `${abs_path(dirname($0))}/get_version.sh --full`;
+lcov_version = "LCOV version " #+ `${abs_path(dirname($0))}/get_version.sh --full`
 lcov_url     = "http://ltp.sourceforge.net/coverage/lcov.php"
 
 

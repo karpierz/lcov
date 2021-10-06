@@ -35,6 +35,12 @@ def sort_unique_lex(iterable: Iterable) -> List:
     return sorted(unique)
 
 
+def remove_items_from_dict(dict: Dict, fns: List):
+    """ """
+    for fn in fns:
+        dict.pop(fn, None)
+
+
 def system_no_output(mode: int, *args) -> int:
     # Call an external program using ARGS while suppressing
     # depending on the value of MODE:

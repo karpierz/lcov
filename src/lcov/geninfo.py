@@ -54,8 +54,7 @@ from pathlib import Path
 
 # Constants
 tool_name    = Path(__file__).stem
-$tool_dir     = abs_path(dirname($0));
-lcov_version = 'LCOV version ' #+`$tool_dir/get_version.sh --full`;
+lcov_version = "LCOV version " #+ `${abs_path(dirname($0))}/get_version.sh --full`
 lcov_url     = "http://ltp.sourceforge.net/coverage/lcov.php"
 $gcov_tool    = "gcov"
 
@@ -63,6 +62,7 @@ GCOV_VERSION_8_0_0 = 0x80000
 GCOV_VERSION_4_7_0 = 0x40700
 GCOV_VERSION_3_4_0 = 0x30400
 GCOV_VERSION_3_3_0 = 0x30300
+
 GCNO_FUNCTION_TAG  = 0x01000000
 GCNO_LINES_TAG     = 0x01450000
 GCNO_FILE_MAGIC    = 0x67636e6f
@@ -158,8 +158,8 @@ sub system_no_output($@);
 from .util import unique
 from .util import sort_unique
 from .util import sort_unique_lex
+from .util import remove_items_from_dict
 from .util import apply_config
-sub filter_fn_name($);
 sub warn_handler($);
 sub die_handler($);
 sub graph_skip(*$;$);
@@ -202,7 +202,7 @@ our $no_markers = 0;
 our $opt_derive_func_data = 0;
 opt_external: bool = True
 our $opt_no_external;
-opt_debug = False
+args.debug = False
 gcov_capabilities: Dict = {}
 our @gcov_options;
 internal_dirs: List[str] = []
@@ -299,31 +299,32 @@ if $config or %opt_rc:
             die(f"ERROR: invalid exclude pattern: {error}")
 
 # Parse command line options
-if (!GetOptions("test-name|t=s" => \$test_name,
+if (!GetOptions(
+        "test-name|t=s"       => \$test_name,
         "output-filename|o=s" => \$output_filename,
-        "checksum" => \$checksum,
-        "no-checksum" => \$no_checksum,
-        "base-directory|b=s" => \$base_directory,
-        "version|v" =>\$version,
-        "quiet|q" => \$quiet,
-        "help|h|?" => \$help,
-        "follow|f" => \$follow,
-        "compat-libtool"    => \opt_compat_libtool,
-        "no-compat-libtool" => \opt_no_compat_libtool,
-        "gcov-tool=s" => \$gcov_tool,
-        "ignore-errors=s" => \@ignore_errors,
-        "initial|i" => \args.initial,
-        "include=s" => \args.include_patterns,
-        "exclude=s" => \args.exclude_patterns,
-        "no-recursion" => \$no_recursion,
-        "no-markers" => \$no_markers,
-        "derive-func-data" => \$opt_derive_func_data,
-        "debug" => \opt_debug,
-        "external|e"  => \opt_external,
-        "no-external" => \opt_no_external,
-        "compat=s"    => \opt_compat,
-        "config-file=s" => \$opt_config_file,
-        "rc=s%" => \%opt_rc,
+        "checksum"            => \$checksum,
+        "no-checksum"         => \$no_checksum,
+        "base-directory|b=s"  => \$base_directory,
+        "version|v"           =>\$version,
+        "quiet|q"             => \$quiet,
+        "help|h|?"            => \$help,
+        "follow|f"            => \$follow,
+        "compat-libtool"      => \opt_compat_libtool,
+        "no-compat-libtool"   => \opt_no_compat_libtool,
+        "gcov-tool=s"         => \$gcov_tool,
+        "ignore-errors=s"     => \@ignore_errors,
+        "initial|i"           => \args.initial,
+        "include=s"           => \args.include_patterns,
+        "exclude=s"           => \args.exclude_patterns,
+        "no-recursion"        => \$no_recursion,
+        "no-markers"          => \$no_markers,
+        "derive-func-data"    => \$opt_derive_func_data,
+        "debug"               => \args.debug,
+        "external|e"          => \opt_external,
+        "no-external"         => \opt_no_external,
+        "compat=s"            => \opt_compat,
+        "config-file=s"       => \$opt_config_file,
+        "rc=s%"               => \%opt_rc,
         )):
     print(f"Use {tool_name} --help to get usage information", file=sys.stderr)
     sys.exit(1)
@@ -387,7 +388,7 @@ if intermediate:
         die("ERROR: excluding exception branches is not compatible with ".
             "text intermediate format\n")
 
-if $no_exception_br and gcov_version < $GCOV_VERSION_3_3_0:
+if $no_exception_br and gcov_version < GCOV_VERSION_3_3_0:
     die("ERROR: excluding exception branches is not compatible with ".
         "gcov versions older than 3.3\n")
 
@@ -440,7 +441,7 @@ for entry in @data_directory:
     if not os.access(entry, os.R_OK):
         die(f"ERROR: cannot read {entry}!\n")
 
-if gcov_version < $GCOV_VERSION_3_4_0:
+if gcov_version < GCOV_VERSION_3_4_0:
     if is_compat($COMPAT_MODE_HAMMER):
         $data_file_extension  = ".da"
         $graph_file_extension = ".bbg"
@@ -802,7 +803,7 @@ def process_dafile($da_filename, $dir):
         # Read contents of graph file into hash. We need it later to find out
         # the absolute path to each .gcov file created as well as for
         # information about functions and their source code positions.
-        if gcov_version < $GCOV_VERSION_3_4_0:
+        if gcov_version < GCOV_VERSION_3_4_0:
             if is_compat($COMPAT_MODE_HAMMER):
                 instr, graph = read_bbg(Path($bb_filename))
             else:
@@ -950,8 +951,8 @@ def process_dafile($da_filename, $dir):
                 Path($gcov_file).unlink()
                 continue
             }
-            @gcov_content = @{$result[0]};
-            $gcov_branches = $result[1];
+            @gcov_content   = @{$result[0]};
+            $gcov_branches  = $result[1];
             @gcov_functions = @{$result[2]};
 
             # Skip empty files
@@ -1041,7 +1042,7 @@ def process_dafile($da_filename, $dir):
                     }
 
                     # Normalize function name
-                    $fn = filter_fn_name($fn);
+                    $fn = filter_fn_name($fn)
 
                     print(INFO_HANDLE "FN:$line,$fn\n");
                 }
@@ -1059,7 +1060,7 @@ def process_dafile($da_filename, $dir):
                 my $count = shift(@gcov_functions);
                 my $fn = shift(@gcov_functions);
 
-                $fn = filter_fn_name($fn);
+                $fn = filter_fn_name($fn)
                 printf(INFO_HANDLE "FNDA:$count,$fn\n");
                 $funcs_found += 1
                 $funcs_hit++ if ($count > 0);
@@ -1142,9 +1143,10 @@ def match_filename($filename, @list):
     # Return a list of those entries of LIST which match the relative filename
     # GCOV_FILENAME.
 
-    my ($vol, $dir, $file) = splitpath($filename);
-    my @comp = splitdir($dir);
-    my $comps = len(@comp)
+    $vol, $dir, $file = splitpath(filename)
+    @comp = splitdir($dir)
+    $comps = len(@comp)
+
     my $entry;
     my @result;
 
@@ -1187,17 +1189,15 @@ def solve_ambiguous_match($rel_name, $matches, $content):
     # 
     # Return the one real match or die if there is none.
 
-    my $filename;
     my $index;
-    my $no_match;
 
     # Check the list of matches
-    for $filename in @$matches:
+    for filename in @$matches:
         # Compare file contents
         try:
-            SOURCE = open("<", $filename)
+            SOURCE = Path(filename).open("rt")
         except:
-            die("ERROR: cannot read $filename!\n")
+            die(f"ERROR: cannot read {filename}!\n")
         $no_match = 0;
         with SOURCE:
             for ($index = 2; <SOURCE>; $index += 3):
@@ -1210,7 +1210,7 @@ def solve_ambiguous_match($rel_name, $matches, $content):
                     $no_match = 1;
                     break
 
-        if ! $no_match:
+        if not $no_match:
             info("Solved source file ambiguity for $rel_name\n")
             return filename
 
@@ -1354,14 +1354,16 @@ def read_gcov_file($filename) -> Tuple[Optional[???], Optional[???], Optional[??
     my $last_block = $UNNAMED_BLOCK;
     my $last_line = 0;
 
-    INPUT = open("<", $filename)
-    if ! INPUT:
+    try:
+        INPUT = Path(filename).open("rt")
+    except:
         if $ignore_errors[ERROR_GCOV]:
-            warn("WARNING: cannot read $filename!\n")
+            warn(f"WARNING: cannot read {filename}!\n")
             return (None, None, None)
-        die("ERROR: cannot read $filename!\n")
+        else:
+            die(f"ERROR: cannot read {filename}!\n")
 
-    if gcov_version < $GCOV_VERSION_3_3_0:
+    if gcov_version < GCOV_VERSION_3_3_0:
     {
         # Expect gcov format as used in gcc < 3.3
         while (<INPUT>)
@@ -1416,9 +1418,9 @@ def read_gcov_file($filename) -> Tuple[Optional[???], Optional[???], Optional[??
                 # Check for exclusion markers (exception branch exclude)
                 if (!$no_markers and 
                     /($EXCL_EXCEPTION_BR_STOP|$EXCL_EXCEPTION_BR_START|$excl_exception_br_line)/) {
-                    warn("WARNING: $1 found at $filename:$last_line but ".
-                    "branch exceptions exclusion is not supported with ".
-                    "gcov versions older than 3.3\n");
+                    warn(f"WARNING: $1 found at {filename}:$last_line but "
+                         "branch exceptions exclusion is not supported with "
+                         "gcov versions older than 3.3\n")
                 }
                 # Source code execution data
                 if (/^\t\t(.*)$/)
@@ -1572,7 +1574,7 @@ def read_gcov_file($filename) -> Tuple[Optional[???], Optional[???], Optional[??
     INPUT.close()
 
     if $exclude_flag or $exclude_br_flag or $exclude_exception_br_flag:
-        warn("WARNING: unterminated exclusion section in $filename\n")
+        warn(f"WARNING: unterminated exclusion section in {filename}\n")
 
     return (\@result, $branches, \@functions);
 
@@ -1648,14 +1650,13 @@ def intermediate_text_to_info($fd, $data, $srcdata):
     #       that appear multiple times for the same lines/branches are not added.
     #       This is done by lcov/genhtml when reading the data files.
 
-    my () = @_;
     my $branch_num = 0;
     my $c;
 
     if ! %{$data}: return
 
     print($fd "TN:$test_name\n");
-    for $filename in (keys(%{$data})):
+    for filename in (keys(%{$data})):
     {
         my ($excl, $brexcl, $checksums);
 
@@ -1670,7 +1671,7 @@ def intermediate_text_to_info($fd, $data, $srcdata):
             ($excl, $brexcl, $checksums) = @{$srcdata->{$filename}};
         }
 
-        print($fd "SF:$filename\n");
+        print($fd f"SF:{filename}\n")
         for $line in split(/\n/, $data->{$filename}):
         {
             if ($line =~ /^lcount:(\d+),(\d+),?/) {
@@ -1767,7 +1768,7 @@ def intermediate_json_to_info($fd, $data, $srcdata):
     if ! %{$data}: return
 
     print($fd "TN:$test_name\n");
-    for my $filename (keys(%{$data}))
+    for filename in (keys(%{$data})):
     {
         my ($excl, $brexcl, $checksums);
 
@@ -1783,14 +1784,16 @@ def intermediate_json_to_info($fd, $data, $srcdata):
             ($excl, $brexcl, $checksums) = @{$srcdata->{$filename}};
         }
 
-        print($fd "SF:$filename\n");
+        print($fd f"SF:{filename}\n")
 
         # Function data
-        if ($fn_coverage) {
-            for my $d (@{$file_data->{"functions"}}) {
-                my $line = $d->{"start_line"};
-                my $count = $d->{"execution_count"};
-                my $name = $d->{"name"};
+        if ($fn_coverage)
+        {
+            for my $d (@{$file_data["functions"]})
+            {
+                $line  = $d->{"start_line"};
+                $count = $d->{"execution_count"};
+                $name  = $d->{"name"};
 
                 if (!defined($line) or !defined($count) or
                     !defined($name) or $excl->{$line}); continue
@@ -1872,39 +1875,40 @@ def get_output_fd($outfile, $file):
     """ """
     if ! defined($outfile):
         try:
-            fhandle = open(">", "$file.info")
-        except:
-            die("ERROR: Cannot create file $file.info: $!\n");
-    elif $outfile == "-":
+            fhandle = Path(f"{file}.info").open("wt")
+        except Exception as exc:
+            die(f"ERROR: Cannot create file {file}.info: {exc}\n")
+    elif outfile == "-":
         try:
             fhandle = open(">&STDOUT")
-        except:
-            die("ERROR: Cannot duplicate stdout: $!\n");
+        except Exception as exc:
+            die(f"ERROR: Cannot duplicate stdout: {exc}\n")
     else:
         try:
-            fhandle = open(">>", $outfile)
-        except:
-            die("ERROR: Cannot write to file $outfile: $!\n");
+            fhandle = Path(outfile).open(">>")
+        except Exception as exc:
+            die(f"ERROR: Cannot write to file {outfile}: {exc}\n")
 
     return fhandle
 
 # NOK
 def print_gcov_warnings($stderr_file, is_graph: bool, $map):
-    # Print GCOV warnings in file STDERR_FILE to STDERR.
-    # If IS_GRAPH is non-zero, suppress warnings about missing as these are expected.
-    # Replace keys found in MAP with their values.
+    """Print GCOV warnings in file STDERR_FILE to STDERR.
+    If IS_GRAPH is non-zero, suppress warnings about missing as these
+    are expected. Replace keys found in MAP with their values.
+    """
     try:
-        fhandle = open("<", $stderr_file)
-    except:
-        warn(f"WARNING: Could not open GCOV stderr file $stderr_file: $!\n")
+        fhandle = Path($stderr_file).open("rt")
+    except Exception as exc:
+        warn(f"WARNING: Could not open GCOV stderr file {stderr_file}: {exc}\n")
         return
     with fhandle:
-        while (my $line = <fhandle>):
-            if is_graph and $line =~ r"cannot open data file":
+        for line in <fhandle>:
+            if is_graph and line =~ r"cannot open data file":
                 continue
             for $key in (keys(%{$map})):
-                $line =~ s/\Q$key\E/$map->{$key}/g;
-            print($line, end="", file=sys.stderr)
+                line =~ s/\Q$key\E/$map->{$key}/g;
+            print(line, end="", file=sys.stderr)
 
 # NOK
 def process_intermediate($file, $dir, $tempdir):
@@ -1933,7 +1937,7 @@ def process_intermediate($file, $dir, $tempdir):
             # accidental processing of associated data file
             data_file = "$tempdir/$fbase$graph_file_extension"
             if ! copy($file, data_file):
-                errmsg = "ERROR: Could not copy file $file"
+                errmsg = f"ERROR: Could not copy file {file}"
                 goto err;
         else:
             # Process data file in place
@@ -1942,8 +1946,8 @@ def process_intermediate($file, $dir, $tempdir):
         # Change directory
         try
             os.chdir($tempdir)
-        except:
-            errmsg = "Could not change to directory $tempdir: $!"
+        except Exception as exc:
+            errmsg = f"Could not change to directory $tempdir: {exc}"
             goto err;
 
         # Run gcov on data file
@@ -1955,7 +1959,7 @@ def process_intermediate($file, $dir, $tempdir):
             print_gcov_warnings($err, is_graph, { $data_file => $file, })
             Path($err).unlink()
         if $rc:
-            errmsg = "GCOV failed for $file"
+            errmsg = f"GCOV failed for {file}"
             goto err;
 
         if is_graph:
@@ -1975,7 +1979,7 @@ def process_intermediate($file, $dir, $tempdir):
             $json_format = 1;
 
         if ! %data:
-            warn(f"WARNING: GCOV did not produce any data for $file\n")
+            warn(f"WARNING: GCOV did not produce any data for {file}\n")
             return
 
         # Determine base directory
@@ -2045,10 +2049,7 @@ def get_gcov_version() -> Tuple[int, str]:
     # GCOV version. Version numbers can be compared using standard integer
     # operations.
 
-    local *HANDLE;
-    my $version_string;
-    my $result;
-    my ($a, $b, $c) = (4, 2, 0);    # Fallback version
+    $a, $b, $c = (4, 2, 0)  # Fallback version
 
     # Examples for gcov version output:
     #
@@ -2066,30 +2067,30 @@ def get_gcov_version() -> Tuple[int, str]:
     try:
         GCOV_PIPE = open(, "-|", "$gcov_tool --version")
     except:
-        or die("ERROR: cannot retrieve gcov version!\n")
+        die("ERROR: cannot retrieve gcov version!\n")
     local $/;
-    $version_string = <GCOV_PIPE>;
-    close(GCOV_PIPE);
+    with GCOV_PIPE:
+        version_string = <GCOV_PIPE>
 
     # Remove all bracketed information
-    $version_string =~ s/\([^\)]*\)//g;
+    version_string =~ s/\([^\)]*\)//g;
 
-    if ($version_string =~ /(\d+)\.(\d+)(\.(\d+))?/):
-        ($a, $b, $c) = ($1, $2, $4);
-        $c = 0 if (!defined($c));
+    if version_string =~ /(\d+)\.(\d+)(\.(\d+))?/:
+        $a, $b, $c = ($1, $2, $4)
+        if ! defined($c): $c = 0
     else:
         warn("WARNING: cannot determine gcov version - assuming $a.$b.$c\n")
 
-    $result = $a << 16 | $b << 8 | $c;
+    result = $a << 16 | $b << 8 | $c
 
-    if ($version_string =~ /LLVM/):
-        $result = map_llvm_version($result)
-        info("Found LLVM gcov version $a.$b.$c, which emulates gcov ".
-             "version ".version_to_str($result)."\n");
+    if version_string =~ /LLVM/:
+        result = map_llvm_version(result)
+        info("Found LLVM gcov version $a.$b.$c, which emulates gcov version {}\n".format(
+             version_to_str(result)))
     else:
-        info("Found gcov version: ".version_to_str($result)."\n");
+        info("Found gcov version: {}\n".format(version_to_str(result)))
 
-    return ($result, $version_string);
+    return (result, version_string)
 
 # NOK
 def info(printf_parameter):
@@ -2183,13 +2184,12 @@ def get_source_data($filename):
     my %checksums;
 
     try:
-        HANDLE = open("<", $filename)
+        fhandle = Path(filename).open("rt")
     except:
-        warn("WARNING: could not open $filename\n")
+        warn(f"WARNING: could not open {filename}\n")
         return
-    with HANDLE:
-        while (<HANDLE>)
-        {
+    with fhandle:
+        while (<fhandle>):
             if (/$EXCL_STOP/) {
                 $flag = 0;
             } elsif (/$EXCL_START/) {
@@ -2219,13 +2219,12 @@ def get_source_data($filename):
             }
             if (intermediate and not gcov_capabilities.get('json-format') and
                 /($EXCL_EXCEPTION_BR_STOP|$EXCL_EXCEPTION_BR_START|$excl_exception_br_line)/):
-                warn("WARNING: $1 found at $filename:$. but branch exceptions ".
-                    "exclusion is not supported when using text intermediate ".
-                    "format\n");
-        }
+                warn(f"WARNING: $1 found at {filename}:$. but branch exceptions "
+                     "exclusion is not supported when using text intermediate "
+                     "format\n")
 
     if $flag or $brflag or $exceptionbrflag:
-        warn("WARNING: unterminated exclusion section in $filename\n")
+        warn(f"WARNING: unterminated exclusion section in {filename}\n")
 
     return (\%list, \%brdata, \%checksums);
 
@@ -2258,22 +2257,22 @@ def process_graphfile($file, $dir):
     """ """
     global cwd
 
-    my $graph_filename = $file;
-
     my $graph_dir;
     my $graph_basename;
     my $source_dir;
     my $base_dir;
     my $graph;
     my $instr;
-    my $filename;
+
     local *INFO_HANDLE;
+
+    graph_filename = $file;
 
     info("Processing %s\n", abs2rel($file, $dir))
 
     # Get path to data file in absolute and normalized form (begins with /,
     # contains no more ../ or ./)
-    $graph_filename = solve_relative_path(cwd, $graph_filename)
+    graph_filename = solve_relative_path(cwd, graph_filename)
 
     # Get directory and basename of data file
     $graph_dir, $graph_basename, _ = split_filename(graph_filename)
@@ -2290,11 +2289,11 @@ def process_graphfile($file, $dir):
         $base_dir = $source_dir
 
     # Ignore empty graph file (e.g. source file with no statement)
-    if (-z $graph_filename):
+    if (-z graph_filename):
         warn(f"WARNING: empty {graph_filename} (skipped)\n")
         return
 
-    if gcov_version < $GCOV_VERSION_3_4_0:
+    if gcov_version < GCOV_VERSION_3_4_0:
         if is_compat($COMPAT_MODE_HAMMER):
             instr, graph = read_bbg(Path(graph_filename))
         else:
@@ -2320,16 +2319,16 @@ def process_graphfile($file, $dir):
             INFO_HANDLE = sys.stdout
         else:
             # Append to output file
-            INFO_HANDLE = open(">>", $output_filename)
+            INFO_HANDLE = Path($output_filename).open(">>")
                 #or die("ERROR: cannot write to $output_filename!\n")
     else:
         # Open .info file for output
-        INFO_HANDLE = open(">", f"{graph_filename}.info")
+        INFO_HANDLE = Path(f"{graph_filename}.info").open(">")
             #or die(f"ERROR: cannot create {graph_filename}.info!\n")
 
     # Write test name
     printf(INFO_HANDLE "TN:%s\n", $test_name);
-    for $filename in sort(keys(%{$instr})):
+    for filename in sort(keys(%{$instr})):
     {
         my $funcdata = $graph->{$filename};
         my $line;
@@ -2337,7 +2336,7 @@ def process_graphfile($file, $dir):
 
         # Skip external files if requested
         if not opt_external:
-            if is_external($filename):
+            if is_external(filename):
                 info(f"  ignoring data for external file {filename}\n")
                 continue
 
@@ -2355,13 +2354,11 @@ def process_graphfile($file, $dir):
                 $linedata = $funcdata->{$func};
 
                 # Print function name and starting line
-                print(INFO_HANDLE "FN:".$linedata->[0].
-                      ",".filter_fn_name($func)."\n");
+                print(INFO_HANDLE "FN:".$linedata->[0].",".filter_fn_name($func)."\n");
             }
             # Print zero function coverage data
             foreach $func (@functions) {
-                print(INFO_HANDLE "FNDA:0,".
-                      filter_fn_name($func)."\n");
+                print(INFO_HANDLE "FNDA:0,".filter_fn_name($func)."\n");
             }
             # Print function summary
             print(INFO_HANDLE "FNF:{}\n".format(len(@functions)))
@@ -2401,7 +2398,7 @@ def apply_exclusion_data($instr, $graph):
         return ($instr, $graph)
 
     # Apply exclusion marker data to graph
-    for $filename in %$excl_data.keys():
+    for filename in %$excl_data.keys():
 
         $excl = $excl_data->{$filename}->[0];
         $function_data = $graph->{$filename};
@@ -2434,7 +2431,7 @@ def apply_exclusion_data($instr, $graph):
             delete ($graph->{$filename});
 
     # Apply exclusion marker data to instr
-    for $filename in %$excl_data.keys():
+    for filename in %$excl_data.keys():
 
         $excl = $excl_data->{$filename}->[0];
         $line_data = instr[filename]
@@ -2452,61 +2449,19 @@ def apply_exclusion_data($instr, $graph):
 
     return ($instr, $graph)
 
-# NOK
-def filter_fn_name($fn: str):
-    # Remove characters used internally as function name delimiters
-    $fn =~ s/[,=]/_/g;
-    return $fn
 
-# NOK
-def graph_read(fhandle, length: int, description: Optional[str] = None, peek: bool = False) -> Optional[str]:
-    # graph_read(fhandle, bytes[, description, peek])
-    #
-    # Read and return the specified number of bytes from fhandle.
-    # Return None if the number of bytes could not be read.
-    # If PEEK is non-zero, reset file position after read.
-
-    graph_expect(description)
-
-    if peek:
-        pos = tell($fhandle)
-        if pos == -1:
-            warn("Could not get current file position: $!\n")
-            return None
-
-    my $data;
-    read_length = read($fhandle, $data, length)
-
-    if opt_debug:
-        op = "peek" if peek else "read"
-        print(f"DEBUG: {op}({length})={result}: ", end="", file=sys.stderr)
-
-        ascii = ""
-        hex   = ""
-        for ch in $data:
-            hex   += "%02x " % ord(ch)
-            ascii += ch if 32 <= ord(ch) <= 127 else "."
-
-        print(f"{hex} |{ascii}|", file=sys.stderr)
-
-    if peek:
-        if not seek($fhandle, pos, 0):
-            warn("Could not set file position: $!\n")
-            return None
-
-    if read_length != length:
-        return None
-
-    return $data
+def filter_fn_name(func: str):
+    """Remove characters used internally as function name delimiters."""
+    func = re.sub(r"[,=]", "_", func)
+    return func
 
 
 def graph_expect(description: Optional[str]):
     """If debug is set to a non-zero value, print the specified description
     of what is expected to be read next from the graph file.
     """
-    global opt_debug
-    if not opt_debug or description is None:
-        return
+    global args
+    if not args.debug or description is None: return
     print(f"DEBUG: expecting {description}", file=sys.stderr)
 
 
@@ -2754,7 +2709,6 @@ def read_bb(bb_filename: Path):
     minus_two = 0x80000002
 
     my $value;
-    my $filename;
     my $function;
     my $instr;
     my $graph;
@@ -2763,35 +2717,36 @@ def read_bb(bb_filename: Path):
     my $fileorder = {}
 
     try:
-        HANDLE = bb_filename.open("rb")
+        fhandle = bb_filename.open("rb")
     except:
         graph_error(bb_filename, "could not open file")
         return None
-    with HANDLE:
-        while ! eof(HANDLE):
-            $word_value = read_bb_value(HANDLE, "data word")
+    with fhandle:
+        filename = None
+        while ! eof(fhandle):
+            $word_value = read_bb_value(fhandle, "data word")
             if word_value is None:
                 goto incomplete
             _, $value: int = $word_value
             if $value == minus_one:
                 # Source file name
                 graph_expect("filename")
-                $filename = read_bb_string(HANDLE, minus_one)
+                filename = read_bb_string(fhandle, minus_one)
                 if filename is None:
                     goto incomplete
             elif $value == minus_two:
                 # Function name
                 graph_expect("function name")
-                $function = read_bb_string(HANDLE, minus_two)
+                $function = read_bb_string(fhandle, minus_two)
                 if function is None:
                     goto incomplete
             elif $value > 0:
                 # Line number
-                if !defined($filename) or !defined($function):
+                if filename is None or !defined($function):
                     warn("WARNING: unassigned line number $value\n")
                     continue
                 @{$bb->{$function}->{$filename}}.append($value)
-                graph_add_order($fileorder, $function, $filename)
+                graph_add_order($fileorder, $function, filename)
 
     instr, graph = graph_from_bb(bb, $fileorder, bb_filename)
     graph_cleanup(graph)
@@ -2799,11 +2754,12 @@ def read_bb(bb_filename: Path):
     return (instr, graph)
 
     incomplete:
-    graph_error($bb_filename, "reached unexpected end of file");
+    graph_error(bb_filename, "reached unexpected end of file")
     return None
 
 
-def read_bb_string(fhandle, delimiter: int) -> Optional[str]:
+def read_bb_string(fhandle,
+                   delimiter: int) -> Optional[str]:
     """Read and return a string in .bb format from fhandle up to the
     specified delimiter value."""
     graph_expect("string")
@@ -2821,21 +2777,21 @@ def read_bb_string(fhandle, delimiter: int) -> Optional[str]:
     return string
 
 
-def read_bb_value(fhandle, description: Optional[str] = None) -> Optional[Tuple[str, int]]:
+def read_bb_value(fhandle,
+                  description: Optional[str] = None) -> Optional[Tuple[str, int]]:
     """Read a word in .bb format from fhandle and return the word and
     its integer value."""
     word = read_bb_word(fhandle, description)
     return (word, unpack("V", word)) if word is not None else None
 
 
-def read_bb_word(fhandle, description: Optional[str] = None) -> Optional[str]:
+def read_bb_word(fhandle,
+                 description: Optional[str] = None) -> Optional[str]:
     """Read and return a word in .bb format from fhandle."""
     return graph_read(fhandle, 4, description)
 
 # NOK
-def read_bbg($bbg_filename):
-    # read_bbg(filename)
-    #
+def read_bbg(bbg_filename: Path):
     # Read the contents of the specified .bbg file and return the following mapping:
     #   graph:     filename -> file_data
     #   file_data: function name -> line_data
@@ -2849,59 +2805,60 @@ def read_bbg($bbg_filename):
     tag_lines    = 0x01450000
 
     my $word;
-    my $function;
-    my $filename;
-    my $bb = {};
-    my $fileorder = {};
     my $instr;
     my $graph;
 
+    function  = None
+    $bb        = {}
+    $fileorder = {}
+
     try
-        HANDLE = open($bbg_filename, "rb")
+        fhandle = bbg_filename.open("rb")
     except:
-        graph_error($bbg_filename, "could not open file")
+        graph_error(bbg_filename, "could not open file")
         return None
-    with HANDLE:
+    filename = None
+    with fhandle:
         # Read magic
-        word = read_bbg_value(HANDLE, "file magic")
+        word = read_bbg_value(fhandle, "file magic")
         if word is None:
             goto incomplete
         # Check magic
         if word != file_magic:
             goto magic_error;
         # Skip version
-        if not graph_skip(HANDLE, 4, "version"):
+        if not graph_skip(fhandle, 4, "version"):
             goto incomplete;
-        while not eof(HANDLE):
+        while not eof(fhandle):
             # Read record tag
-            tag = read_bbg_value(HANDLE, "record tag")
+            tag = read_bbg_value(fhandle, "record tag")
             if tag is None:
                 goto incomplete
             # Read record length
-            length = read_bbg_value(HANDLE, "record length")
-            if length is None: # !!! tu blad - ma byc !defined($length) !!!
+            rec_length = read_bbg_value(fhandle, "record length")
+            if rec_length is None: # !!! tu blad - ma byc !defined($length) !!!
                 goto incomplete
             if tag == tag_function:
                 graph_expect("function record")
                 # Read function name
                 graph_expect("function name")
-                $function = read_bbg_string(HANDLE)
+                function = read_bbg_string(fhandle)
                 if function is None:
                     goto incomplete
-                $filename = None
+                filename = None
                 # Skip function checksum
-                if not graph_skip(HANDLE, 4, "function checksum"):
+                if not graph_skip(fhandle, 4, "function checksum"):
                     goto incomplete;
             elif tag == tag_lines:
                 # Read lines record
-                $filename = read_bbg_lines_record(HANDLE, $bbg_filename,
-                                                  $bb, $fileorder, $filename,
-                                                  $function)
-                if ! defined($filename):
+                filename = read_bbg_lines_record(fhandle, $bbg_filename,
+                                                 $bb, $fileorder, filename,
+                                                 function)
+                if filename is None:
                     goto incomplete
             else:
                 # Skip record contents
-                if not graph_skip(HANDLE, length, "unhandled record"):
+                if not graph_skip(fhandle, rec_length, "unhandled record"):
                     goto incomplete;
 
     instr, graph = graph_from_bb(bb, $fileorder, bbg_filename)
@@ -2910,15 +2867,16 @@ def read_bbg($bbg_filename):
     return (instr, graph)
 
     incomplete:
-    graph_error($bbg_filename, "reached unexpected end of file")
+    graph_error(bbg_filename, "reached unexpected end of file")
     return None
 
     magic_error:
-    graph_error($bbg_filename, "found unrecognized bbg file magic")
+    graph_error(bbg_filename, "found unrecognized bbg file magic")
     return None
 
 # NOK
-def read_bbg_lines_record($handle, $bbg_filename, $bb, $fileorder, $filename, $function) -> Optional[???]:
+def read_bbg_lines_record(fhandle,
+                          $bbg_filename, $bb, $fileorder, $filename, $function) -> Optional[???]:
     # read_bbg_lines_record(handle, bbg_filename, bb, fileorder, filename,
     #                       function)
     #
@@ -2930,30 +2888,30 @@ def read_bbg_lines_record($handle, $bbg_filename, $bb, $fileorder, $filename, $f
 
     graph_expect("lines record")
     # Skip basic block index
-    if not graph_skip($handle, 4, "basic block index"):
+    if not graph_skip(fhandle, 4, "basic block index"):
         return None
     while True:
         # Read line number
-        lineno = read_bbg_value($handle, "line number")
+        lineno = read_bbg_value(fhandle, "line number")
         if lineno is None:
             return None
         if lineno == 0:
             # Got a marker for a new filename
             graph_expect("filename")
-            string = read_bbg_string($handle)
+            string = read_bbg_string(fhandle)
             if string is None:
                 return None
             # Check for end of record
             if string == "":
                 return filename
             filename = string
-            if !exists($bb->{$function}->{$filename}):
-                $bb->{$function}->{$filename} = [];
+            if ! exists($bb->{$function}->{$filename}):
+                $bb->{$function}->{$filename} = []
             continue
 
         # Got an actual line number
-        if !defined($filename):
-            warn("WARNING: unassigned line number in $bbg_filename\n")
+        if filename is None:
+            warn(f"WARNING: unassigned line number in {bbg_filename}\n")
             continue
 
         @{$bb->{$function}->{$filename}}.append($lineno)
@@ -2980,13 +2938,15 @@ def read_bbg_string(fhandle) -> Optional[str]:
     return string
 
 
-def read_bbg_value(fhandle, description: Optional[str] = None) -> Optional[int]:
+def read_bbg_value(fhandle,
+                   description: Optional[str] = None) -> Optional[int]:
     """Read a word in .bbg format from fhandle and return its integer value."""
     word = read_bbg_word(fhandle, description)
     return unpack("N", word) if word is not None else None
 
 
-def read_bbg_word(fhandle, description: Optional[str] = None) -> Optional[str]:
+def read_bbg_word(fhandle,
+                  description: Optional[str] = None) -> Optional[str]:
     """Read and return a word in .bbg format."""
     return graph_read(fhandle, 4, description)
 
@@ -3005,8 +2965,6 @@ def read_gcno(gcno_filename: str) -> Optional[Tuple[Any, Any]]
     tag_function = 0x01000000
     tag_lines    = 0x01450000
 
-    big_endian: bool
-
     my $length;
     my $filename;
     my $function;
@@ -3019,17 +2977,18 @@ def read_gcno(gcno_filename: str) -> Optional[Tuple[Any, Any]]
     artificial_fns: List = []
 
     try:
-        HANDLE = open(gcno_filename, "rb")
+        fhandle = Path(gcno_filename).open("rb")
     except:
         graph_error(gcno_filename, "could not open file")
         return None
 
-    $filelength = Path().stat(HANDLE)[7]
+    $filelength = Path().stat(fhandle)[7]
     # Read magic
-    word = read_gcno_word(HANDLE, "file magic")
+    word = read_gcno_word(fhandle, "file magic")
     if word is None:
         goto incomplete
     # Determine file endianness
+    big_endian: bool
     if unpack("N", word) == file_magic:
         big_endian = True
     elif unpack("V", word) == file_magic:
@@ -3037,30 +2996,30 @@ def read_gcno(gcno_filename: str) -> Optional[Tuple[Any, Any]]
     else:
         goto magic_error;
     # Read version
-    version = read_gcno_value(HANDLE, big_endian, "compiler version")
+    version = read_gcno_value(fhandle, big_endian, "compiler version")
     version = map_gcno_version(version)
     debug("found version 0x%08x\n" % version)
     # Skip stamp
-    if not graph_skip(HANDLE, 4, "file timestamp"):
+    if not graph_skip(fhandle, 4, "file timestamp"):
         goto incomplete;
     if version >= GCOV_VERSION_8_0_0:
-        if not graph_skip(HANDLE, 4, "support unexecuted blocks flag"):
+        if not graph_skip(fhandle, 4, "support unexecuted blocks flag"):
             goto incomplete;
 
-    with HANDLE:
-        while (!eof(HANDLE))
+    with fhandle:
+        while !eof(fhandle):
             # Read record tag
-            tag = read_gcno_value(HANDLE, big_endian, "record tag")
+            tag = read_gcno_value(fhandle, big_endian, "record tag")
             if tag is None:
                 goto incomplete
             # Read record length
-            length = read_gcno_value(HANDLE, big_endian, "record length")
+            length = read_gcno_value(fhandle, big_endian, "record length")
             if length is None:
                 goto incomplete
             # Convert length to bytes
             length *= 4
             # Calculate start of next record
-            next_pos = tell(HANDLE);
+            next_pos = tell(fhandle);
             if next_pos == -1:
                 goto tell_error
             next_pos += length
@@ -3068,14 +3027,16 @@ def read_gcno(gcno_filename: str) -> Optional[Tuple[Any, Any]]
             # Catch garbage at the end of a gcno file
             if next_pos > $filelength:
                 debug(f"Overlong record: file_length={filelength} rec_length={length}\n")
-                warn(f"WARNING: $gcno_filename: Overlong record at end of file!\n")
+                warn(f"WARNING: {gcno_filename}: Overlong record at end of file!\n")
                 break
 
             # Process record
             if tag == tag_function:
-                filename_function_artificial = read_gcno_function_record(HANDLE, $bb,
-                                                                         $fileorder, big_endian,
-                                                                         length, version)
+                filename_function_artificial = read_gcno_function_record(fhandle, $bb,
+                                                                         $fileorder,
+                                                                         big_endian,
+                                                                         length,
+                                                                         version)
                 if filename_function_artificial is None:
                      goto incomplete
                 $filename, $function, artificial = filename_function_artificial
@@ -3083,29 +3044,29 @@ def read_gcno(gcno_filename: str) -> Optional[Tuple[Any, Any]]
                     artificial_fns.append($function)
             elif tag == tag_lines:
                 # Read lines record
-                $filename = read_gcno_lines_record(HANDLE,
+                $filename = read_gcno_lines_record(fhandle,
                                                    gcno_filename, $bb, $fileorder,
                                                    $filename, $function, big_endian)
                 if $filename is None:
                     goto incomplete
             else:
                 # Skip record contents
-                if not graph_skip(HANDLE, length, "unhandled record"):
+                if not graph_skip(fhandle, length, "unhandled record"):
                     goto incomplete;
             # Ensure that we are at the start of the next record
-            curr_pos = tell(HANDLE)
+            curr_pos = tell(fhandle)
             if curr_pos == -1:
                 goto tell_error
             if curr_pos == next_pos:
                 continue
             if curr_pos > next_pos:
                 goto record_error
-            if not graph_skip(HANDLE, next_pos - curr_pos, "unhandled record content"):
+            if not graph_skip(fhandle, next_pos - curr_pos, "unhandled record content"):
                 goto incomplete;
 
     # Remove artificial functions from result data
-    remove_fn_from_dict($bb,        artificial_fns)
-    remove_fn_from_dict($fileorder, artificial_fns)
+    remove_items_from_dict($bb,        artificial_fns)
+    remove_items_from_dict($fileorder, artificial_fns)
 
     instr, graph = graph_from_bb(bb, $fileorder, gcno_filename, fileorder_first=True)
     graph_cleanup(graph)
@@ -3129,7 +3090,11 @@ def read_gcno(gcno_filename: str) -> Optional[Tuple[Any, Any]]
     return None
 
 # NOK
-def read_gcno_function_record($handle, $bb, $fileorder, big_endian: bool, $rec_length, $version) -> Optional[Tuple[str, str, bool]]:
+def read_gcno_function_record(fhandle,
+                              $bb, $fileorder,
+                              big_endian: bool,
+                              rec_length: int,
+                              version: int) -> Optional[Tuple[str, str, bool]]:
     # read_gcno_function_record(handle, graph, big_endian, rec_length, version)
     #
     # Read a gcno format function record from handle and add the relevant data
@@ -3142,42 +3107,42 @@ def read_gcno_function_record($handle, $bb, $fileorder, big_endian: bool, $rec_l
 
     graph_expect("function record");
     # Skip ident and checksum
-    if not graph_skip($handle, 8, "function ident and checksum"):
+    if not graph_skip(fhandle, 8, "function ident and checksum"):
         return None
     # Determine if this is a function record with split checksums
     if gcno_split_crc is None:
-        gcno_split_crc = determine_gcno_split_crc($handle, big_endian,
-                                                  $rec_length, $version)
+        gcno_split_crc = determine_gcno_split_crc(fhandle, big_endian,
+                                                  rec_length, version)
         if gcno_split_crc is None:
             return None
     # Skip cfg checksum word in case of split checksums
     if gcno_split_crc:
-        graph_skip($handle, 4, "function cfg checksum")
+        graph_skip(fhandle, 4, "function cfg checksum")
     # Read function name
     graph_expect("function name");
-    function = read_gcno_string($handle, big_endian)
+    function = read_gcno_string(fhandle, big_endian)
     if function is None:
         return None
     artificial = None
-    if $version >= GCOV_VERSION_8_0_0:
-        artificial = read_gcno_value($handle, big_endian,
+    if version >= GCOV_VERSION_8_0_0:
+        artificial = read_gcno_value(fhandle, big_endian,
                                      "compiler-generated entity flag")
         if artificial is None:
             return None
     # Read filename
     graph_expect("filename");
-    filename = read_gcno_string($handle, big_endian)
+    filename = read_gcno_string(fhandle, big_endian)
     if filename is None:
         return None
     # Read first line number
-    lineno = read_gcno_value($handle, big_endian, "initial line number")
+    lineno = read_gcno_value(fhandle, big_endian, "initial line number")
     if lineno is None:
         return None
     # Skip column and ending line number
-    if $version >= GCOV_VERSION_8_0_0:
-        if not graph_skip($handle, 4, "column number"):
+    if version >= GCOV_VERSION_8_0_0:
+        if not graph_skip(fhandle, 4, "column number"):
             return None
-        if not graph_skip($handle, 4, "ending line number"):
+        if not graph_skip(fhandle, 4, "ending line number"):
             return None
     # Add to list
     @{$bb->{function}->{filename}}.append(lineno)
@@ -3186,10 +3151,13 @@ def read_gcno_function_record($handle, $bb, $fileorder, big_endian: bool, $rec_l
     return (filename, function, bool(artificial))
 
 
-def determine_gcno_split_crc(fhandle, big_endian: bool, rec_length: int, version: int) -> Optional[bool]:
-    """Determine if HANDLE refers to a .gcno file with a split checksum function
-    record format. Return non-zero in case of split checksum format, zero
-    otherwise, None in case of read error."""
+def determine_gcno_split_crc(fhandle,
+                             big_endian: bool,
+                             rec_length: int,
+                             version: int) -> Optional[bool]:
+    """Determine if fhandle refers to a .gcno file with a split checksum
+    function record format. Return non-zero in case of split checksum format,
+    zero otherwise, None in case of read error."""
 
     if version >= GCOV_VERSION_4_7_0:    return True
     if is_compat(COMPAT_MODE_SPLIT_CRC): return True
@@ -3202,7 +3170,7 @@ def determine_gcno_split_crc(fhandle, big_endian: bool, rec_length: int, version
     # - gcc 4.7
     #   This is a checksum, likely with high-order bits set,
     #   resulting in a large number
-    strlen = read_gcno_value(fhandle, big_endian, None, 1)
+    strlen = read_gcno_value(fhandle, big_endian, None, peek=True)
     if strlen is None:
         return None
 
@@ -3220,7 +3188,8 @@ def determine_gcno_split_crc(fhandle, big_endian: bool, rec_length: int, version
     return False
 
 # NOK
-def read_gcno_lines_record($handle, $gcno_filename, $bb, $fileorder, $filename, $function, big_endian: bool) -> Optional[???]:
+def read_gcno_lines_record(fhandle,
+                           $gcno_filename, $bb, $fileorder, $filename, $function, big_endian: bool) -> Optional[???]:
     # read_gcno_lines_record(handle, gcno_filename, bb, fileorder, filename,
     #                        function, big_endian)
     #
@@ -3229,17 +3198,17 @@ def read_gcno_lines_record($handle, $gcno_filename, $bb, $fileorder, $filename, 
 
     graph_expect("lines record");
     # Skip basic block index
-    if not graph_skip($handle, 4, "basic block index"):
+    if not graph_skip(fhandle, 4, "basic block index"):
         return None
     while True:
         # Read line number
-        lineno = read_gcno_value($handle, big_endian, "line number")
+        lineno = read_gcno_value(fhandle, big_endian, "line number")
         if lineno is None:
             return None
         if lineno == 0:
             # Got a marker for a new filename
             graph_expect("filename")
-            string = read_gcno_string($handle, big_endian)
+            string = read_gcno_string(fhandle, big_endian)
             if string is None:
                 return None
             # Check for end of record
@@ -3251,8 +3220,8 @@ def read_gcno_lines_record($handle, $gcno_filename, $bb, $fileorder, $filename, 
             continue
 
         # Got an actual line number
-        if ! defined($filename):
-            warn("WARNING: unassigned line number in $gcno_filename\n")
+        if filename is None:
+            warn(f"WARNING: unassigned line number in {gcno_filename}\n")
             continue
 
         # Add to list
@@ -3260,7 +3229,8 @@ def read_gcno_lines_record($handle, $gcno_filename, $bb, $fileorder, $filename, 
         graph_add_order($fileorder, $function, $filename)
 
 
-def read_gcno_string(fhandle, big_endian: bool) -> Optional[str]:
+def read_gcno_string(fhandle,
+                     big_endian: bool) -> Optional[str]:
     """Read and return a string in .gcno format."""
     graph_expect("string")
     # Read string length
@@ -3278,17 +3248,59 @@ def read_gcno_string(fhandle, big_endian: bool) -> Optional[str]:
     return string
 
 
-def read_gcno_value(fhandle, big_endian: bool, description=None, peek: bool = False) -> Optional[int]:
+def read_gcno_value(fhandle, big_endian: bool, description=None, *,
+                    peek: bool = False) -> Optional[int]:
     """Read a word in .gcno format from fhandle and return its integer value
     according to the specified endianness. If PEEK is non-zero, reset file
     position after read.
     """
-    word = read_gcno_word(fhandle, description, peek)
+    word = read_gcno_word(fhandle, description, peek=peek)
     return unpack("N" if big_endian else "V", word) if word is not None else None
 
-def read_gcno_word(fhandle, description=None, peek: bool = False) -> Optional[str]:
+
+def read_gcno_word(fhandle, description=None, *,
+                   peek: bool = False) -> Optional[str]:
     """Read and return a word in .gcno format."""
-    return graph_read(fhandle, 4, description, peek)
+    return graph_read(fhandle, 4, description, peek=peek)
+
+
+def graph_read(fhandle, length: int, description: Optional[str] = None, *,
+               peek: bool = False) -> Optional[str]:
+    """Read and return the specified number of bytes from fhandle.
+    Return None if the number of bytes could not be read.
+    If peek is non-zero, reset file position after read.
+    """
+    graph_expect(description)
+
+    if peek:
+        try:
+            pos = fhandle.tell()
+        except Exception as exc:
+            warn(f"Could not get current file position: {exc}!\n")
+            return None
+
+    data = fhandle.read(length)
+
+    if args.debug:
+        op = "peek" if peek else "read"
+        print(f"DEBUG: {op}({length})={result}: ", end="", file=sys.stderr)
+        ascii, hex = "", ""
+        for ch in data:
+            hex   += "%02x " % ord(ch)
+            ascii += ch if 32 <= ord(ch) <= 127 else "."
+        print(f"{hex} |{ascii}|", file=sys.stderr)
+
+    if peek:
+        try:
+            fhandle.seek(pos, 0)
+        except Exception as exc:
+            warn(f"Could not set file position: {exc}!\n")
+            return None
+
+    if len(data) != length:
+        return None
+
+    return data
 
 # NOK
 def graph_error(filename: Path, msg: str):
@@ -3320,12 +3332,6 @@ def map_gcno_version(version: int) ->int:
         minor = (c - ord_0)
 
     return major << 16 | minor << 8
-
-
-def remove_fn_from_dict(dict: Dict, fns: List):
-    """ """
-    for fn in fns:
-        dict.pop(fn, None)
 
 
 def get_gcov_capabilities() -> Dict[str, bool]:
@@ -3373,8 +3379,7 @@ def get_gcov_capabilities() -> Dict[str, bool]:
 
 # NOK
 def parse_ignore_errors(ignore_errors: List)
-    # Parse user input about which errors to ignore.
-
+    """Parse user input about which errors to ignore."""
     global ignore
 
     if not ignore_errors:
@@ -3485,6 +3490,7 @@ def compat_name(mode: int) -> str:
 def compat_hammer_autodetect() -> int:
     """ """
     global gcov_version, gcov_version_string
+
     if ((re.search(r"suse",     gcov_version_string, re.I) and gcov_version == 0x30303) or
         (re.search(r"mandrake", gcov_version_string, re.I) and gcov_version == 0x30302)):
         info("Auto-detected compatibility mode for GCC 3.3 (hammer)\n")
@@ -3583,9 +3589,8 @@ def main(argv=sys.argv[1:]):
         sys.exit(1)
 
     def debug(msg: str):
-        global opt_debug
-        if not opt_debug:
-            return
+        global args
+        if not args.debug: return
         print(f"DEBUG: {msg}", end="", file=sys.stderr)
 
     def warn_handler(msg: str):

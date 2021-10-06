@@ -64,10 +64,10 @@ from .util import reverse_dict
 
 # Global constants
 tool_name    = Path(__file__).stem
-our $title        = "LCOV - code coverage report";
+our $title   = "LCOV - code coverage report"
 our $tool_dir        = abs_path(dirname($0));
-our $lcov_version    = 'LCOV version '.`$tool_dir/get_version.sh --full`;
-our $lcov_url        = "http://ltp.sourceforge.net/coverage/lcov.php";
+lcov_version = "LCOV version " #+ `${abs_path(dirname($0))}/get_version.sh --full`
+lcov_url     = "http://ltp.sourceforge.net/coverage/lcov.php"
 
 # Specify coverage rate default precision
 our $default_precision = 1;
@@ -130,9 +130,9 @@ SORT_FUNC   = 2
 SORT_BRANCH = 3
 
 # Fileview heading types
-our $HEAD_NO_DETAIL    = 1;
-our $HEAD_DETAIL_HIDDEN    = 2;
-our $HEAD_DETAIL_SHOWN    = 3;
+HEAD_NO_DETAIL     = 1
+HEAD_DETAIL_HIDDEN = 2
+HEAD_DETAIL_SHOWN  = 3
 
 # Additional offsets used when converting branch coverage data to HTML
 BR_LEN   = 3
@@ -189,7 +189,6 @@ sub escape_html($);
 sub get_bar_graph_code($$$);
 
 sub write_css_file();
-sub write_function_table(*$$$$$$$$$$);
 
 sub write_html_prolog(*$$);
 sub write_html_epilog(*$;$);
@@ -199,10 +198,6 @@ sub write_header_line(*@);
 sub write_header_epilog(*$);
 
 sub write_file_table(*$$$$$$$);
-sub write_file_table_prolog(*$@);
-sub write_file_table_entry(*$$$@);
-sub write_file_table_detail_entry(*$@);
-sub write_file_table_epilog(*);
 
 sub write_test_table_prolog(*$);
 sub write_test_table_entry(*$$);
@@ -325,7 +320,7 @@ if $config or %opt_rc:
         "genhtml_demangle_cpp_tool"    => \options.demangle_cpp_tool,
         "genhtml_demangle_cpp_params"  => \options.demangle_cpp_params,
         "genhtml_dark_mode"             => \$dark_mode,
-        "genhtml_missed"        => \$opt_missed,
+        "genhtml_missed"              => \$opt_missed,
         "lcov_function_coverage"      => \options.lcov_function_coverage,
         "lcov_branch_coverage"        => \options.lcov_branch_coverage,
         });
@@ -652,8 +647,8 @@ def rename_functions($$)
             $f_found += 1
             $f_hit++ if ($newsumfnccount{$fn} > 0);
         }
-        $data->{"f_found"} = $f_found;
-        $data->{"f_hit"} = $f_hit;
+        $data["f_found"] = $f_found;
+        $data["f_hit"] = $f_hit;
     }
 }
 
@@ -818,33 +813,36 @@ def html_create($filename):
 
 # NOK
 def write_dir_page($name,
-                   $rel_dir, $base_dir, $title, $trunc_dir,
+                   $rel_dir, $base_dir, title: str, $trunc_dir,
                    $overall_found,  $overall_hit,
                    $total_fn_found, $total_fn_hit,
                    $total_br_found, $total_br_hit,
                    $overview,
                    $testhash, $testfnchash, $testbrhash,
-                   $view_type, $sort_type):
+                   $view_type, sort_type: int):
     """ """
     global args
 
     # Generate directory overview page including details
     with html_create(f"$rel_dir/index$name.{args.html_ext}") as html_handle:
+
         if ! defined($trunc_dir):
-            $trunc_dir = "";
-        if $trunc_dir != "":
-            $title += " - "
-        write_html_prolog(html_handle, $base_dir, f"LCOV - $title$trunc_dir")
+            trunc_dir = ""
+        if trunc_dir != "":
+            title += " - "
+
+        write_html_prolog(html_handle, $base_dir, f"LCOV - {title}{trunc_dir}")
+
         write_header(html_handle, $view_type,
-                     $trunc_dir, $rel_dir,
+                     trunc_dir, $rel_dir,
                      $overall_found,  $overall_hit,
                      $total_fn_found, $total_fn_hit,
                      $total_br_found, $total_br_hit,
-                     $sort_type)
+                     sort_type)
 
         write_file_table(html_handle, $base_dir, $overview,
                          $testhash, $testfnchash, $testbrhash,
-                         $view_type, $sort_type);
+                         $view_type, sort_type);
 
         write_html_epilog(html_handle, $base_dir)
 
@@ -880,14 +878,14 @@ def process_dir(abs_dir):
         # Match directory name beginning with one of @dir_prefix
         $rel_dir = apply_prefix($rel_dir, @dir_prefix)
 
-    $trunc_dir = $rel_dir;
+    trunc_dir = $rel_dir;
     # Remove leading /
     if ($rel_dir =~ /^\/(.*)$/):
         $rel_dir = substr($rel_dir, 1)
 
     # Handle files in root directory gracefully
     if $rel_dir   == "": $rel_dir   = "root"
-    if $trunc_dir == "": $trunc_dir = "root"
+    if trunc_dir == "": trunc_dir = "root"
 
     base_dir: str = get_relative_base_path($rel_dir)
 
@@ -895,12 +893,13 @@ def process_dir(abs_dir):
 
     # Match filenames which specify files in this directory, not including
     # sub-directories
-    my $overall_found  = 0
-    my $overall_hit    = 0
-    my $total_fn_found = 0
-    my $total_fn_hit   = 0
-    my $total_br_found = 0
-    my $total_br_hit   = 0
+    overall_found  = 0
+    overall_hit    = 0
+    total_fn_found = 0
+    total_fn_hit   = 0
+    total_br_found = 0
+    total_br_hit   = 0
+
     foreach $filename (grep(/^\Q$abs_dir\E\/[^\/]*$/,keys(%info_data))):
         my $page_link;
         my $func_link;
@@ -908,7 +907,7 @@ def process_dir(abs_dir):
         (ln_found, ln_hit,
          fn_found, fn_hit,
          br_found, br_hit,
-         $testdata, $testfncdata, $testbrdata) = process_file($trunc_dir, $rel_dir, $filename)
+         $testdata, $testfncdata, $testbrdata) = process_file(trunc_dir, $rel_dir, $filename)
 
         $base_name = basename($filename);
 
@@ -933,18 +932,18 @@ def process_dir(abs_dir):
         $testfnchash{$base_name} = $testfncdata;
         $testbrhash{$base_name}  = $testbrdata;
 
-        overall_found  += $ln_found;
-        overall_hit    += $ln_hit;
-        total_fn_found += $fn_found;
-        total_fn_hit   += $fn_hit;
-        total_br_found += $br_found;
-        total_br_hit   += $br_hit;
+        overall_found  += ln_found
+        overall_hit    += ln_hit
+        total_fn_found += fn_found
+        total_fn_hit   += fn_hit
+        total_br_found += br_found
+        total_br_hit   += br_hit
 
     # Create sorted pages
     for $_ in @fileview_sortlist:
         # Generate directory overview page (without details)    
         write_dir_page($fileview_sortname[$_],
-                   $rel_dir, base_dir, $test_title, $trunc_dir,
+                   $rel_dir, base_dir, $test_title, trunc_dir,
                    $overall_found,  $overall_hit,
                    $total_fn_found, $total_fn_hit,
                    $total_br_found, $total_br_hit,
@@ -952,7 +951,7 @@ def process_dir(abs_dir):
         if not $show_details: continue
         # Generate directory overview page including details
         write_dir_page("-detail".$fileview_sortname[$_],
-                   $rel_dir, $base_dir, $test_title, $trunc_dir,
+                   $rel_dir, $base_dir, $test_title, trunc_dir,
                    $overall_found,  $overall_hit,
                    $total_fn_found, $total_fn_hit,
                    $total_br_found, $total_br_hit,
@@ -965,8 +964,8 @@ def process_dir(abs_dir):
             total_br_found, total_br_hit)
 
 # NOK
-def write_function_page($base_dir, $rel_dir, $trunc_dir,
-                        $base_name, $title,
+def write_function_page($base_dir, $rel_dir, trunc_dir,
+                        $base_name, title: str,
                         $ln_found, $ln_hit,
                         $fn_found, $fn_hit,
                         $br_found, $br_hit,
@@ -984,10 +983,12 @@ def write_function_page($base_dir, $rel_dir, $trunc_dir,
         $filename = f"$rel_dir/$base_name.func-sort-c.{args.html_ext}"
 
     with html_create($filename) as html_handle:
-        $pagetitle = f"LCOV - $title - $trunc_dir/$base_name - functions"
-        write_html_prolog(html_handle, $base_dir, $pagetitle)
+
+        write_html_prolog(html_handle, $base_dir,
+                          f"LCOV - {title} - {trunc_dir}/$base_name - functions")
+
         write_header(html_handle, 4,
-                     "$trunc_dir/$base_name", "$rel_dir/$base_name",
+                     f"{trunc_dir}/$base_name", "$rel_dir/$base_name",
                      $ln_found, $ln_hit,
                      $fn_found, $fn_hit,
                      $br_found, $br_hit,
@@ -1004,6 +1005,76 @@ def write_function_page($base_dir, $rel_dir, $trunc_dir,
         write_html_epilog(html_handle, $base_dir, 1)
 
 # NOK
+def write_function_table(html_handle,
+                         $source,
+                         $sumcount,   $funcdata,
+                         $sumfncdata, $testfncdata,
+                         $sumbrcount, $testbrdata,
+                         $name, $base, $type):
+    # write_function_table(html_handle, source_file, sumcount, funcdata,
+    #               sumfnccount, testfncdata, sumbrcount, testbrdata,
+    #               base_name, base_dir, sort_type)
+    #
+    # Write an HTML table listing all functions in a source file, including
+    # also function call counts and line coverages inside of each function.
+    #
+    # Die on error.
+
+    my $func;
+    my $demangle;
+
+    # Get HTML code for headings
+    $func_code  = funcview_get_func_code($name,  $base, $type)
+    $count_code = funcview_get_count_code($name, $base, $type)
+    write_html(html_handle, <<END_OF_HTML)
+      <center>
+      <table width="60%" cellpadding=1 cellspacing=1 border=0>
+        <tr><td><br></td></tr>
+        <tr>
+          <td width="80%" class="tableHead">$func_code</td>
+          <td width="20%" class="tableHead">$count_code</td>
+        </tr>
+END_OF_HTML
+
+    # Get demangle translation hash
+    if args.demangle_cpp:
+        $demangle = demangle_list(sorted($funcdata.keys()))
+
+    # Get a sorted table
+    for $func in funcview_get_sorted($funcdata, $sumfncdata, $type):
+        if ! defined($funcdata->{$func}): continue
+
+        my $startline = $funcdata->{$func} - $func_offset;
+        my $name      = $func;
+        my $count     = $sumfncdata->{$name};
+
+        my $countstyle;
+
+        # Replace function name with demangled version if available
+        if (exists($demangle->{$name})):
+            $name = $demangle->{$name}
+
+        # Escape special characters
+        $name = escape_html($name);
+
+        if $startline < 1:
+            $startline = 1
+        $countstyle = "coverFnLo" if $count == 0 else "coverFnHi"
+
+        write_html(html_handle, <<END_OF_HTML)
+        <tr>
+              <td class="coverFn"><a href="$source#$startline">$name</a></td>
+              <td class="$countstyle">$count</td>
+            </tr>
+END_OF_HTML
+
+    write_html(html_handle, <<END_OF_HTML)
+      </table>
+      <br>
+      </center>
+END_OF_HTML
+
+# NOK
 def process_file($trunc_dir, $rel_dir, $filename) -> Tuple ???:
 
     global args
@@ -1016,7 +1087,6 @@ def process_file($trunc_dir, $rel_dir, $filename) -> Tuple ???:
 
     my $testcount;
     my @source;
-    my $pagetitle;
 
     (testdata, sumcount, funcdata, checkdata,
      testfncdata, sumfnccount,
@@ -1035,12 +1105,15 @@ def process_file($trunc_dir, $rel_dir, $filename) -> Tuple ???:
 
     converted: Set[int] = get_converted_lines(testdata)
 
+    page_title = f"LCOV - $test_title - {trunc_dir}/$base_name"
+
     # Generate source code view for this file
     with html_create(f"$rel_dir/$base_name.gcov.{args.html_ext}") as html_handle: 
-        $pagetitle = "LCOV - $test_title - $trunc_dir/$base_name"
-        write_html_prolog(html_handle, base_dir, $pagetitle)
+
+        write_html_prolog(html_handle, base_dir, page_title)
+
         write_header(html_handle, 2,
-                     "$trunc_dir/$base_name", "$rel_dir/$base_name"
+                     f"{trunc_dir}/$base_name", "$rel_dir/$base_name"
                      ln_found, ln_hit,
                      fn_found, fn_hit,
                      br_found, br_hit,
@@ -1055,7 +1128,7 @@ def process_file($trunc_dir, $rel_dir, $filename) -> Tuple ???:
     if $fn_coverage:
         # Create function tables
         for line in @funcview_sortlist:
-            write_function_page($base_dir, $rel_dir, $trunc_dir,
+            write_function_page($base_dir, $rel_dir, trunc_dir,
                                 base_name, $test_title,
                                 ln_found, ln_hit,
                                 fn_found, fn_hit,
@@ -1078,11 +1151,11 @@ def process_file($trunc_dir, $rel_dir, $filename) -> Tuple ???:
 
     # Create frameset page
     with html_create(f"$rel_dir/$base_name.gcov.frameset.{args.html_ext}") as html_handle:
-        write_frameset(html_handle, $base_dir, base_name, $pagetitle)
+        write_frameset(html_handle, $base_dir, base_name, page_title)
 
     # Write overview frame
     with html_create(f"$rel_dir/$base_name.gcov.overview.{args.html_ext}") as html_handle:
-        write_overview(html_handle, $base_dir, base_name, $pagetitle, len(@source))
+        write_overview(html_handle, $base_dir, base_name, page_title, len(@source))
 
     return (ln_found, ln_hit,
             fn_found, fn_hit,
@@ -1402,36 +1475,36 @@ def read_info_file($tracefile):
          _, _, _, _, _, _) = get_info_entry($data)
 
         # Filter out empty files
-        if scalar(keys(%{$sumcount})) == 0:
+        if len(%{$sumcount}) == 0:
             delete($result{$filename});
             continue
 
         # Filter out empty test cases
         for $testname in keys(%{$testdata}):
             if (!defined($testdata->{$testname}) or
-                scalar(keys(%{$testdata->{$testname}})) == 0):
+                len(%{$testdata->{$testname}}) == 0):
                 delete($testdata->{$testname});
                 delete($testfncdata->{$testname});
 
-        $data->{"found"} = scalar(keys(%{$sumcount}));
+        $data["found"] = len(%{$sumcount});
         $hitcount = 0;
 
         foreach (keys(%{$sumcount})):
             if ($sumcount->{$_} > 0):
                 $hitcount += 1
-        $data->{"hit"} = $hitcount;
+        $data["hit"] = $hitcount;
 
         # Get found/hit values for function call data
-        $data->{"f_found"} = scalar(keys(%{$sumfnccount}));
+        $data["f_found"] = len($sumfnccount)
         $hitcount = 0;
 
         foreach (keys(%{$sumfnccount})):
             if ($sumfnccount->{$_} > 0):
                 $hitcount += 1
-        $data->{"f_hit"} = $hitcount;
+        $data["f_hit"] = $hitcount;
 
         # Combine branch data for the same branches
-        _, $data->{"b_found"}, $data->{"b_hit"} = compress_brcount($sumbrcount)
+        _, $data["b_found"], $data->{"b_hit"} = compress_brcount($sumbrcount)
         for $testname in keys(%{$testbrdata}):
             compress_brcount($testbrdata->{$testname})
 
@@ -1574,11 +1647,11 @@ def get_relative_base_path(subdir: str):
     my $result = ""
 
     # Make an empty directory path a special case
-    if $_[0]:
+    if subdir:
         # Count number of /s in path
-        $index = ($_[0] =~ s/\//\//g)
+        index = (subdir =~ s/\//\//g)
         # Add a ../ to $result for each / in the directory path + 1
-        for (; $index >= 0; $index--):
+        for (; index >= 0; index--):
             result += "../"
 
     return result
@@ -1707,16 +1780,18 @@ def write_description_file(description: Dict[???, ???],
 
 # NOK
 def write_png_files():
-    # Create all necessary .png files for the HTML-output in the
-    # current directory. .png-files are used as bar graphs.
-    #
-    # Die on error.
+    """Create all necessary .png files for the HTML-output
+    in the current directory. .png-files are used as bar graphs.
 
-    my %data;
-    local *PNG_HANDLE;
+    Die on error.
+    """
+    global dark_mode
+    global $sort
 
-    if $dark_mode:
-        $data{"ruby.png"} =
+    data: Dict[str, object] = {}
+
+    if dark_mode:
+        data["ruby.png"] =
             [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00,
              0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00,
              0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x01, 0x03, 0x00,
@@ -1726,9 +1801,9 @@ def write_png_files():
              0x0a, 0x49, 0x44, 0x41, 0x54, 0x08, 0xd7, 0x63, 0x60,
              0x00, 0x00, 0x00, 0x02, 0x00, 0x01, 0xe2, 0x21, 0xbc,
              0x33, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44,
-             0xae, 0x42, 0x60, 0x82];
+             0xae, 0x42, 0x60, 0x82]
     else:
-        $data{"ruby.png"} =
+        data["ruby.png"] =
             [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00,
              0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00,
              0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x01, 0x03, 0x00,
@@ -1744,10 +1819,10 @@ def write_png_files():
              0x00, 0x00, 0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0xda,
              0x63, 0x60, 0x00, 0x00, 0x00, 0x02, 0x00, 0x01, 0xe5,
              0x27, 0xde, 0xfc, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45,
-             0x4e, 0x44, 0xae, 0x42, 0x60, 0x82];
-    }
-    if $dark_mode:
-        $data{"amber.png"} =
+             0x4e, 0x44, 0xae, 0x42, 0x60, 0x82]
+
+    if dark_mode:
+        data["amber.png"] =
             [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00,
              0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00,
              0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x01, 0x03, 0x00,
@@ -1757,9 +1832,9 @@ def write_png_files():
              0x0a, 0x49, 0x44, 0x41, 0x54, 0x08, 0xd7, 0x63, 0x60,
              0x00, 0x00, 0x00, 0x02, 0x00, 0x01, 0xe2, 0x21, 0xbc,
              0x33, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44,
-             0xae, 0x42, 0x60, 0x82];
-    } else:
-        $data{"amber.png"} =
+             0xae, 0x42, 0x60, 0x82]
+    else:
+        data["amber.png"] =
             [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00,
              0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00,
              0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x01, 0x03, 0x00,
@@ -1775,10 +1850,10 @@ def write_png_files():
              0x00, 0x00, 0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0xda,
              0x63, 0x60, 0x00, 0x00, 0x00, 0x02, 0x00, 0x01, 0xe5,
              0x27, 0xde, 0xfc, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45,
-             0x4e, 0x44, 0xae, 0x42, 0x60, 0x82];
+             0x4e, 0x44, 0xae, 0x42, 0x60, 0x82]
 
-    if $dark_mode:
-        $data{"emerald.png"} =
+    if dark_mode:
+        data["emerald.png"] =
             [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00,
              0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00,
              0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x01, 0x03, 0x00,
@@ -1788,9 +1863,9 @@ def write_png_files():
              0x0a, 0x49, 0x44, 0x41, 0x54, 0x08, 0xd7, 0x63, 0x60,
              0x00, 0x00, 0x00, 0x02, 0x00, 0x01, 0xe2, 0x21, 0xbc,
              0x33, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44,
-             0xae, 0x42, 0x60, 0x82];
-    } else:
-        $data{"emerald.png"} =
+             0xae, 0x42, 0x60, 0x82]
+    else:
+        data["emerald.png"] =
             [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00,
              0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00,
              0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x01, 0x03, 0x00,
@@ -1806,11 +1881,10 @@ def write_png_files():
              0x00, 0x00, 0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0xda,
              0x63, 0x60, 0x00, 0x00, 0x00, 0x02, 0x00, 0x01, 0xe5,
              0x27, 0xde, 0xfc, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45,
-             0x4e, 0x44, 0xae, 0x42, 0x60, 0x82];
+             0x4e, 0x44, 0xae, 0x42, 0x60, 0x82]
 
-    if ($dark_mode)
-    {
-        $data{"snow.png"} =
+    if dark_mode:
+        data["snow.png"] =
             [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00,
              0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00,
              0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x01, 0x03, 0x00,
@@ -1820,9 +1894,9 @@ def write_png_files():
              0x0a, 0x49, 0x44, 0x41, 0x54, 0x08, 0xd7, 0x63, 0x60,
              0x00, 0x00, 0x00, 0x02, 0x00, 0x01, 0xe2, 0x21, 0xbc,
              0x33, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44,
-             0xae, 0x42, 0x60, 0x82];
+             0xae, 0x42, 0x60, 0x82]
     else:
-        $data{"snow.png"} =
+        data["snow.png"] =
             [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00,
              0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00,
              0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x01, 0x03, 0x00,
@@ -1838,10 +1912,9 @@ def write_png_files():
              0x00, 0x00, 0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0xda,
              0x63, 0x60, 0x00, 0x00, 0x00, 0x02, 0x00, 0x01, 0xe5,
              0x27, 0xde, 0xfc, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45,
-             0x4e, 0x44, 0xae, 0x42, 0x60, 0x82];
-    }
+             0x4e, 0x44, 0xae, 0x42, 0x60, 0x82]
 
-    $data{"glass.png"} =
+    data["glass.png"] =
         [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 
          0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 
          0x00, 0x00, 0x00, 0x01, 0x01, 0x03, 0x00, 0x00, 0x00, 0x25, 
@@ -1858,49 +1931,48 @@ def write_png_files():
          0x40, 0x56, 0x10, 0x00, 0x00, 0x00, 0x0a, 0x49, 0x44, 0x41, 
          0x54, 0x78, 0x9c, 0x63, 0x60, 0x00, 0x00, 0x00, 0x02, 0x00, 
          0x01, 0x48, 0xaf, 0xa4, 0x71, 0x00, 0x00, 0x00, 0x00, 0x49, 
-         0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82];
+         0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82]
 
-    if $dark_mode:
-        $data{"updown.png"} =
-            [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00,
-             0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00,
-             0x00, 0x0a, 0x00, 0x00, 0x00, 0x0e, 0x08, 0x06, 0x00,
-             0x00, 0x00, 0x16, 0xa3, 0x8d, 0xab, 0x00, 0x00, 0x00,
-             0x43, 0x49, 0x44, 0x41, 0x54, 0x28, 0xcf, 0x63, 0x60,
-             0x40, 0x03, 0x77, 0xef, 0xde, 0xfd, 0x7f, 0xf7, 0xee,
-             0xdd, 0xff, 0xe8, 0xe2, 0x8c, 0xe8, 0x8a, 0x90, 0xf9,
-             0xca, 0xca, 0xca, 0x8c, 0x18, 0x0a, 0xb1, 0x99, 0x82,
-             0xac, 0x98, 0x11, 0x9f, 0x22, 0x64, 0xc5, 0x8c, 0x84,
-             0x14, 0xc1, 0x00, 0x13, 0xc3, 0x80, 0x01, 0xea, 0xbb,
-             0x91, 0xf8, 0xe0, 0x21, 0x29, 0xc0, 0x89, 0x89, 0x42,
-             0x06, 0x62, 0x13, 0x05, 0x00, 0xe1, 0xd3, 0x2d, 0x91,
-             0x93, 0x15, 0xa4, 0xb2, 0x00, 0x00, 0x00, 0x00, 0x49,
-             0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82] if ($sort);
-    else:
-        $data{"updown.png"} =
-            [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00,
-             0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00,
-             0x00, 0x0a, 0x00, 0x00, 0x00, 0x0e, 0x08, 0x06, 0x00,
-             0x00, 0x00, 0x16, 0xa3, 0x8d, 0xab, 0x00, 0x00, 0x00,
-             0x3c, 0x49, 0x44, 0x41, 0x54, 0x28, 0xcf, 0x63, 0x60,
-             0x40, 0x03, 0xff, 0xa1, 0x00, 0x5d, 0x9c, 0x11, 0x5d,
-             0x11, 0x8a, 0x24, 0x23, 0x23, 0x23, 0x86, 0x42, 0x6c,
-             0xa6, 0x20, 0x2b, 0x66, 0xc4, 0xa7, 0x08, 0x59, 0x31,
-             0x23, 0x21, 0x45, 0x30, 0xc0, 0xc4, 0x30, 0x60, 0x80,
-             0xfa, 0x6e, 0x24, 0x3e, 0x78, 0x48, 0x0a, 0x70, 0x62,
-             0xa2, 0x90, 0x81, 0xd8, 0x44, 0x01, 0x00, 0xe9, 0x5c,
-             0x2f, 0xf5, 0xe2, 0x9d, 0x0f, 0xf9, 0x00, 0x00, 0x00,
-             0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82]
-             if ($sort);
-    }
-    foreach (keys(%data))
-    {
-        open(PNG_HANDLE, ">", $_)
-            or die("ERROR: cannot create $_!\n");
-        binmode(PNG_HANDLE);
-        print(PNG_HANDLE map(chr,@{$data{$_}}));
-        close(PNG_HANDLE);
-    }
+    if $sort;
+        if dark_mode:
+            data["updown.png"] =
+                [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00,
+                 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00,
+                 0x00, 0x0a, 0x00, 0x00, 0x00, 0x0e, 0x08, 0x06, 0x00,
+                 0x00, 0x00, 0x16, 0xa3, 0x8d, 0xab, 0x00, 0x00, 0x00,
+                 0x43, 0x49, 0x44, 0x41, 0x54, 0x28, 0xcf, 0x63, 0x60,
+                 0x40, 0x03, 0x77, 0xef, 0xde, 0xfd, 0x7f, 0xf7, 0xee,
+                 0xdd, 0xff, 0xe8, 0xe2, 0x8c, 0xe8, 0x8a, 0x90, 0xf9,
+                 0xca, 0xca, 0xca, 0x8c, 0x18, 0x0a, 0xb1, 0x99, 0x82,
+                 0xac, 0x98, 0x11, 0x9f, 0x22, 0x64, 0xc5, 0x8c, 0x84,
+                 0x14, 0xc1, 0x00, 0x13, 0xc3, 0x80, 0x01, 0xea, 0xbb,
+                 0x91, 0xf8, 0xe0, 0x21, 0x29, 0xc0, 0x89, 0x89, 0x42,
+                 0x06, 0x62, 0x13, 0x05, 0x00, 0xe1, 0xd3, 0x2d, 0x91,
+                 0x93, 0x15, 0xa4, 0xb2, 0x00, 0x00, 0x00, 0x00, 0x49,
+                 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82]
+        else:
+            data["updown.png"] =
+                [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00,
+                 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00,
+                 0x00, 0x0a, 0x00, 0x00, 0x00, 0x0e, 0x08, 0x06, 0x00,
+                 0x00, 0x00, 0x16, 0xa3, 0x8d, 0xab, 0x00, 0x00, 0x00,
+                 0x3c, 0x49, 0x44, 0x41, 0x54, 0x28, 0xcf, 0x63, 0x60,
+                 0x40, 0x03, 0xff, 0xa1, 0x00, 0x5d, 0x9c, 0x11, 0x5d,
+                 0x11, 0x8a, 0x24, 0x23, 0x23, 0x23, 0x86, 0x42, 0x6c,
+                 0xa6, 0x20, 0x2b, 0x66, 0xc4, 0xa7, 0x08, 0x59, 0x31,
+                 0x23, 0x21, 0x45, 0x30, 0xc0, 0xc4, 0x30, 0x60, 0x80,
+                 0xfa, 0x6e, 0x24, 0x3e, 0x78, 0x48, 0x0a, 0x70, 0x62,
+                 0xa2, 0x90, 0x81, 0xd8, 0x44, 0x01, 0x00, 0xe9, 0x5c,
+                 0x2f, 0xf5, 0xe2, 0x9d, 0x0f, 0xf9, 0x00, 0x00, 0x00,
+                 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82]
+
+    for fname, content in data.items():
+        try:
+            fhandle = Path(fname).open("wb")
+        except:
+            die("ERROR: cannot create {fname}!\n")
+        with fhandle:
+            fhandle.write(map(chr, content))
 
 # NOK
 def write_htaccess_file():
@@ -1969,7 +2041,7 @@ END_OF_CSS
             'COLOR_15' => "284fa8",
             'COLOR_16' => "ffffff");
 
-    if $dark_mode:
+    if dark_mode:
         %palette =  (   'COLOR_00' => "e4e4e4",
                 'COLOR_01' => "58a6ff",
                 'COLOR_02' => "8b949e",
@@ -2074,12 +2146,13 @@ def write_html(html_handle, $html_code):
     Remove leading tab from all lines
     """
     $html_code =~ s/^\t//gm;
-
-    print($html_code, end="", file=html_handle)
-        or die("ERROR: cannot write HTML data ($!)\n")
+    try:
+        print($html_code, end="", file=html_handle)
+    except Exception as exc:
+        or die(f"ERROR: cannot write HTML data ({exc})\n")
 
 # NOK
-def write_html_prolog(filehandle, basedir, pagetitle):
+def write_html_prolog(html_handle, basedir, pagetitle):
     # Write an HTML prolog common to all HTML files to FILEHANDLE. PAGETITLE will
     # be used as HTML page title. BASE_DIR contains a relative path which points
     # to the base directory.
@@ -2087,22 +2160,17 @@ def write_html_prolog(filehandle, basedir, pagetitle):
     global html_prolog
 
     prolog = html_prolog
-    prolog =~ s/\@pagetitle\@/$pagetitle/g
-    prolog =~ s/\@basedir\@/$basedir/g
+    prolog =~ rf"s\@pagetitle\@", rf"$pagetitle"g
+    prolog =~ rf"s\@basedir\@",   rf"$basedir"g
 
-    write_html(filehandle, prolog)
-
-
-#
-# write_header_prolog(filehandle, base_dir)
-#
+    write_html(html_handle, prolog)
 
 # NOK
-def write_header_prolog(filehandle, $):
-    # Write beginning of page header HTML code.
+def write_header_prolog(html_handle, base_dir):
+    """Write beginning of page header HTML code."""
 
     # !!! read from html/header_prolog.html
-    write_html(filehandle, <<END_OF_HTML)
+    write_html(html_handle, <<END_OF_HTML)
 END_OF_HTML
 
 
@@ -2141,240 +2209,39 @@ def write_header_line($handle, @content):
     write_html($handle, "          </tr>\n");
 
 
-#
-# write_header_epilog(filehandle, base_dir)
-#
-
 # NOK
-def write_header_epilog(filehandle, $)
+def write_header_epilog(html_handle, base_dir)
     # Write end of page header HTML code.
     #
     # !!! read from html/header_epilog.html
+    write_html(html_handle, <<END_OF_HTML)
 END_OF_HTML
-
-
-#
-# write_file_table_prolog(handle, file_heading, ([heading, num_cols], ...))
-#
-# Write heading for file table.
-#
 
 # NOK
-def write_file_table_prolog(*$@)
-{
-    my ($handle, $file_heading, @columns) = @_;
-    my $num_columns = 0;
-    my $file_width;
-    my $col;
-    my $width;
-
-    $width = 20 if (scalar(@columns) == 1);
-    $width = 10 if (scalar(@columns) == 2);
-    $width = 8 if (scalar(@columns) > 2);
-
-    foreach $col (@columns) {
-        my ($heading, $cols) = @{$col};
-
-        $num_columns += $cols;
-    }
-    $file_width = 100 - $num_columns * $width;
-
-    # Table definition
-    write_html($handle, <<END_OF_HTML);
-      <center>
-      <table width="80%" cellpadding=1 cellspacing=1 border=0>
-
-        <tr>
-          <td width="$file_width%"><br></td>
-END_OF_HTML
-    # Empty first row
-    foreach $col (@columns) {
-        my ($heading, $cols) = @{$col};
-
-        while ($cols-- > 0) {
-            write_html($handle, <<END_OF_HTML);
-          <td width="$width%"></td>
-END_OF_HTML
-        }
-    }
-    # Next row
-    write_html($handle, <<END_OF_HTML);
-        </tr>
-
-        <tr>
-          <td class="tableHead">$file_heading</td>
-END_OF_HTML
-    # Heading row
-    foreach $col (@columns) {
-        my ($heading, $cols) = @{$col};
-        my $colspan = "";
-
-        $colspan = " colspan=$cols" if ($cols > 1);
-        write_html($handle, <<END_OF_HTML);
-          <td class="tableHead"$colspan>$heading</td>
-END_OF_HTML
-    }
-    write_html($handle, <<END_OF_HTML);
-        </tr>
-END_OF_HTML
-}
-
-
-# write_file_table_entry(handle, base_dir, filename, page_link,
-#             ([ found, hit, med_limit, hi_limit, graph ], ..)
-#
-# Write an entry of the file table.
-#
-
-# NOK
-def write_file_table_entry(*$$$@)
-{
-    my ($handle, $base_dir, $filename, $page_link, @entries) = @_;
-    my $file_code;
-    my $entry;
-    my $esc_filename = escape_html($filename);
-
-    # Add link to source if provided
-    if (defined($page_link) and $page_link != "") {
-        $file_code = "<a href=\"$page_link\">$esc_filename</a>";
-    else:
-        $file_code = $esc_filename;
-    }
-
-    # First column: filename
-    write_html($handle, <<END_OF_HTML);
-        <tr>
-          <td class="coverFile">$file_code</td>
-END_OF_HTML
-    # Columns as defined
-    foreach $entry (@entries) {
-        my ($found, $hit, $med, $hi, $graph) = @{$entry};
-        my $bar_graph;
-        my $class;
-        my $rate;
-
-        # Generate bar graph if requested
-        if ($graph) {
-            $bar_graph = get_bar_graph_code($base_dir, $found,
-                            $hit);
-            write_html($handle, <<END_OF_HTML);
-          <td class="coverBar" align="center">
-            $bar_graph
-          </td>
-END_OF_HTML
-        }
-        # Get rate color and text
-        if ($found == 0) {
-            $rate = "-";
-            $class = "Hi";
-        else:
-            $rate = rate($hit, $found, "&nbsp;%")
-            $class = $rate_name[classify_rate($found, $hit, $med, $hi)];
-        }
-        if ($opt_missed) {
-            # Show negative number of items without coverage
-            $hit = -($found - $hit);
-        }
-        write_html($handle, <<END_OF_HTML);
-          <td class="coverPer$class">$rate</td>
-          <td class="coverNum$class">$hit / $found</td>
-END_OF_HTML
-    }
-    # End of row
-        write_html($handle, <<END_OF_HTML);
-        </tr>
-END_OF_HTML
-}
-
-
-#
-# write_file_table_detail_entry(filehandle, test_name, ([found, hit], ...))
-#
-# Write entry for detail section in file table.
-#
-
-# NOK
-def write_file_table_detail_entry(*$@)
-{
-    my ($handle, $test, @entries) = @_;
-    my $entry;
-
-    if ($test == "") {
-        $test = "<span style=\"font-style:italic\">&lt;unnamed&gt;</span>";
-    } elsif ($test =~ /^(.*),diff$/) {
-        $test = $1." (converted)";
-    }
-    # Testname
-    write_html($handle, <<END_OF_HTML);
-        <tr>
-          <td class="testName" colspan=2>$test</td>
-END_OF_HTML
-    # Test data
-    foreach $entry (@entries) {
-        my ($found, $hit) = @{$entry};
-        my $rate = rate($hit, $found, "&nbsp;%");
-
-        write_html($handle, <<END_OF_HTML);
-          <td class="testPer">$rate</td>
-          <td class="testNum">$hit&nbsp;/&nbsp;$found</td>
-END_OF_HTML
-    }
-
-        write_html($handle, <<END_OF_HTML);
-        </tr>
-
-END_OF_HTML
-
-#
-# write_file_table_epilog(filehandle)
-#
-
-# NOK
-def write_file_table_epilog(filehandle):
-    # Write end of file table HTML code.
-    #
-    # !!! read from html/file_table_epilog.html
-    write_html(filehandle, <<END_OF_HTML)
-END_OF_HTML
-
-#
-# write_test_table_prolog(filehandle, table_heading)
-#
-
-# NOK
-def write_test_table_prolog(filehandle, $)
+def write_test_table_prolog(html_handle, table_heading)
     # Write heading for test case description table.
     #
     # !!! read from html/test_table_prolog.html
-    write_html(filehandle, <<END_OF_HTML)
+    write_html(html_handle, <<END_OF_HTML)
 END_OF_HTML
 
-#
-# write_test_table_entry(filehandle, test_name, test_description)
-#
-# Write entry for the test table.
-#
-
 # NOK
-def write_test_table_entry(*$$)
-{
-    # *************************************************************
-
-    write_html($_[0], <<END_OF_HTML)
-          <dt>$_[1]<a name="$_[1]">&nbsp;</a></dt>
-          <dd>$_[2]<br><br></dd>
-END_OF_HTML
-
-#
-# write_test_table_epilog(filehandle)
-#
-
-# NOK
-def write_test_table_epilog(filehandle):
+def write_test_table_epilog(html_handle):
     # Write end of test description table HTML code.
     #
     # !!! read from html/test_table_epilog.html
-    write_html(filehandle, <<END_OF_HTML)
+    write_html(html_handle, <<END_OF_HTML)
+END_OF_HTML
+
+# NOK
+def write_test_table_entry(html_handle, test_name, test_description):
+    """Write entry for the test table."""
+
+    # *************************************************************
+
+    write_html(html_handle, <<END_OF_HTML)
+          <dt>$_[1]<a name="$_[1]">&nbsp;</a></dt>
+          <dd>$_[2]<br><br></dd>
 END_OF_HTML
 
 
@@ -2394,8 +2261,8 @@ def get_block_len(block: List[???]) -> int:
     return sum((branch[BR_LEN] for branch in block), 0)
 
 # NOK
-def write_html_epilog(*$;$)
-    # write_html_epilog(filehandle, base_dir[, break_frames])
+def write_html_epilog(html_handle, base_dir[, break_frames]):
+    # write_html_epilog(html_handle, base_dir[, break_frames])
     #
     # Write HTML page footer to FILEHANDLE. BREAK_FRAMES should be set when
     # this page is embedded in a frameset, clicking the URL link will then
@@ -2407,22 +2274,20 @@ def write_html_epilog(*$;$)
 
     # *************************************************************
 
-    write_html($_[0], <<END_OF_HTML)
+    write_html(html_handle, <<END_OF_HTML)
       <table width="100%" border=0 cellspacing=0 cellpadding=0>
         <tr><td class="ruler"><img src="$_[1]glass.png" width=3 height=3 alt=""></td></tr>
         <tr><td class="versionInfo">Generated by: <a href="$lcov_url"$break_code>$lcov_version</a></td></tr>
       </table>
       <br>
 END_OF_HTML
-    ;
 
     epilog = html_epilog
     epilog =~ s/\@basedir\@/$basedir/g
-    write_html($_[0], epilog)
+    write_html(html_handle, epilog)
 
 # NOK
-def write_frameset(*$$$)
-    # write_frameset(filehandle, basedir, basename, pagetitle)
+def write_frameset(html_handle, basedir, basename, pagetitle):
 
     global args
 
@@ -2430,7 +2295,7 @@ def write_frameset(*$$$)
 
     # *************************************************************
 
-    write_html($_[0], <<END_OF_HTML)
+    write_html(html_handle, <<END_OF_HTML)
     <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Frameset//EN">
 
     <html lang="en">
@@ -2453,28 +2318,26 @@ def write_frameset(*$$$)
 END_OF_HTML
 
 # NOK
-def write_overview_line(filehandle, basename, line, link   *$$$):
+def write_overview_line(html_handle, basename, line, link   *$$$):
 
-    my $y1 = $_[2] - 1;
-    my $y2 = $y1 + $nav_resolution - 1;
-    my $x2 = $overview_width - 1;
+    y1 = $_[2] - 1;
+    y2 = $y1 + $nav_resolution - 1;
+    x2 = $overview_width - 1;
 
     # *************************************************************
 
-    write_html($_[0], <<END_OF_HTML)
+    write_html(html_handle, <<END_OF_HTML)
         <area shape="rect" coords="0,$y1,$x2,$y2" href="$_[1].gcov.$html_ext#$_[3]" target="source" alt="overview">
 END_OF_HTML
 
 # NOK
-def write_overview(filehandle, basedir, basename, pagetitle, lines   *$$$$):
+def write_overview(html_handle, basedir, basename, pagetitle, lines   *$$$$):
 
-    my $index;
-    my $max_line = $_[4] - 1;
-    my $offset;
+    max_line = $_[4] - 1
 
     # *************************************************************
 
-    write_html($_[0], <<END_OF_HTML)
+    write_html(html_handle, <<END_OF_HTML)
     <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
 
     <html lang="en">
@@ -2489,49 +2352,43 @@ def write_overview(filehandle, basedir, basename, pagetitle, lines   *$$$$):
       <map name="overview">
 END_OF_HTML
 
-    # Make $offset the next higher multiple of $nav_resolution
-    $offset = ($nav_offset + $nav_resolution - 1) / $nav_resolution;
-    $offset = sprintf("%d", $offset ) * $nav_resolution;
+    # Make offset the next higher multiple of $nav_resolution
+    offset = ($nav_offset + $nav_resolution - 1) / $nav_resolution;
+    offset = sprintf("%d", offset ) * $nav_resolution;
 
     # Create image map for overview image
-    for ($index = 1; $index <= $_[4]; $index += $nav_resolution)
-    {
+    for (index = 1; index <= $_[4]; index += $nav_resolution):
         # Enforce nav_offset
-        if ($index < $offset + 1)
-        {
-            write_overview_line($_[0], $_[2], $index, 1);
-        }
-        else
-        {
-            write_overview_line($_[0], $_[2], $index, $index - $offset);
-        }
-    }
+        if index < offset + 1:
+            write_overview_line(html_handle, $_[2], index, 1)
+        else:
+            write_overview_line(html_handle, $_[2], index, index - offset)
 
     # *************************************************************
 
-    write_html($_[0], <<END_OF_HTML)
+    write_html(html_handle, <<END_OF_HTML)
       </map>
 
       <center>
       <a href="$_[2].gcov.$html_ext#top" target="source">Top</a><br><br>
-      <img src="$_[2].gcov.png" width=$overview_width height=$max_line alt="Overview" border=0 usemap="#overview">
+      <img src="$_[2].gcov.png" width=$overview_width height={max_line} alt="Overview" border=0 usemap="#overview">
       </center>
     </body>
     </html>
 END_OF_HTML
 
 # NOK
-def write_header(HTML_HANDLE, $type,        
+def write_header(html_handle, $type,        
                  $trunc_name,  $rel_filename,
                  $ln_found, $ln_hit,      
                  $fn_found, $fn_hit,      
                  $br_found, $br_hit,      
-                 $sort_type):
+                 sort_type: int):
 
     global args
     global test_description
 
-    # write_header(filehandle, type, trunc_file_name, rel_file_name, ln_found,
+    # write_header(html_handle, type, trunc_file_name, rel_file_name, ln_found,
     # ln_hit, funcs_found, funcs_hit, sort_type)
     #
     # Write a complete standard page header. TYPE may be (0, 1, 2, 3, 4)
@@ -2544,8 +2401,6 @@ def write_header(HTML_HANDLE, $type,
     my $base_name;
     my $style;
     my $rate;
-    my @row_left;
-    my @row_right;
     my $num_rows;
     my $i;
     my $esc_trunc_name = escape_html($trunc_name);
@@ -2621,14 +2476,17 @@ def write_header(HTML_HANDLE, $type,
                  "view descriptions</a></span> )";
 
     # Write header
-    write_header_prolog(HTML_HANDLE, $base_dir)
+    write_header_prolog(html_handle, $base_dir)
+
+    row_left = []
+    row_right = []
 
     # Left row
-    push(@row_left, [[ "10%", "headerItem", "Current view:" ],
+    row_left.append([[ "10%", "headerItem", "Current view:" ],
                      [ "35%", "headerValue", $view ]]);
-    push(@row_left, [[_, "headerItem", "Test:"],
+    row_left.append([[_, "headerItem", "Test:"],
                      [_, "headerValue", $test]]);
-    push(@row_left, [[_, "headerItem", "Date:"],
+    row_left.append([[_, "headerItem", "Date:"],
                      [_, "headerValue", $date]]);
 
     # Right row
@@ -2645,7 +2503,7 @@ END_OF_HTML
             <span class="coverLegendNoCov">-</span> not taken
             <span class="coverLegendNoCov">#</span> not executed
 END_OF_HTML
-        push(@row_left, [[_, "headerItem", "Legend:"],
+        row_left.append([[_, "headerItem", "Legend:"],
                          [_, "headerValueLeg", $text]])
     elif $legend and ($type != $HDR_TESTDESC):
         my $text = <<END_OF_HTML;
@@ -2654,12 +2512,12 @@ END_OF_HTML
             <span class="coverLegendCovMed" title="Coverage rates between $med_limit % and $hi_limit % are classified as medium">medium: &gt;= $med_limit %</span>
             <span class="coverLegendCovHi" title="Coverage rates of $hi_limit % and more are classified as high">high: &gt;= $hi_limit %</span>
 END_OF_HTML
-        push(@row_left, [[_, "headerItem", "Legend:"],
+        row_left.append([[_, "headerItem", "Legend:"],
                          [_, "headerValueLeg", $text]])
     if ($type == $HDR_TESTDESC):
-        push(@row_right, [[ "55%" ]]);
+        row_right.append([[ "55%" ]]);
     else:
-        push(@row_right, [["15%", _, _ ],
+        row_right.append([["15%", _, _ ],
                           ["10%", "headerCovTableHead", "Hit" ],
                           ["10%", "headerCovTableHead", "Total" ],
                           ["15%", "headerCovTableHead", "Coverage"]])
@@ -2667,7 +2525,7 @@ END_OF_HTML
     $style = $rate_name[classify_rate($ln_found, $ln_hit,
                                       $med_limit, $hi_limit)];
     $rate = rate($ln_hit, $ln_found, " %");
-    push(@row_right, [[_, "headerItem", "Lines:"],
+    row_right.append([[_, "headerItem", "Lines:"],
                       [_, "headerCovTableEntry", $ln_hit],
                       [_, "headerCovTableEntry", $ln_found],
                       [_, "headerCovTableEntry$style", $rate]])
@@ -2677,7 +2535,7 @@ END_OF_HTML
         $style = $rate_name[classify_rate($fn_found, $fn_hit,
                           $fn_med_limit, $fn_hi_limit)];
         $rate = rate($fn_hit, $fn_found, " %");
-        push(@row_right, [[_, "headerItem", "Functions:"],
+        row_right.append([[_, "headerItem", "Functions:"],
                           [_, "headerCovTableEntry", $fn_hit],
                           [_, "headerCovTableEntry", $fn_found],
                           [_, "headerCovTableEntry$style", $rate]])
@@ -2688,7 +2546,7 @@ END_OF_HTML
         $style = $rate_name[classify_rate($br_found, $br_hit,
                           $br_med_limit, $br_hi_limit)];
         $rate = rate($br_hit, $br_found, " %");
-        push(@row_right, [[_, "headerItem", "Branches:"],
+        row_right.append([[_, "headerItem", "Branches:"],
                           [_, "headerCovTableEntry", $br_hit],
                           [_, "headerCovTableEntry", $br_found],
                           [_, "headerCovTableEntry$style", $rate]])
@@ -2696,8 +2554,9 @@ END_OF_HTML
     }
 
     # Print rows
-    $num_rows = max(scalar(@row_left), scalar(@row_right));
-    for ($i = 0; $i < $num_rows; $i++) {
+    $num_rows = max(len(row_left), len(row_right))
+    for ($i = 0; $i < $num_rows; $i++)
+    {
         my $left = $row_left[$i];
         my $right = $row_right[$i];
 
@@ -2708,125 +2567,44 @@ END_OF_HTML
         if (!defined($right)) {
             $right = [];
         }
-        write_header_line(HTML_HANDLE,
+        write_header_line(html_handle,
                           @{$left},
                           [ $i == 0 ? "5%" : _, _, _],
                           @{$right})
     }
 
     # Fourth line
-    write_header_epilog(HTML_HANDLE, $base_dir)
+    write_header_epilog(html_handle, $base_dir)
 
 # NOK
 def get_sort_code(link: Optional[str], $alt, $base):
 
-    if link is None:
-        png        = "glass.png"
-        link_start = ""
-        link_end   = ""
-    else:
+    if link is not None:
         png        = "updown.png"
         link_start = f'<a href="{link}">'
         link_end   = "</a>"
+    else:
+        png        = "glass.png"
+        link_start = ""
+        link_end   = ""
 
     return (' '
             f'<span class="tableHeadSort">'.$link_start
-            f'<img src="'.$base.$png.'" width=10 height=14 '
-            f'alt="'.$alt.'" title="'.$alt.'" border=0>'.$link_end.'</span>')
+            f'<img src="'.$base.$png.'" width=10 height=14'
+            f' alt="'.$alt.'" title="'.$alt.'" border=0>'.$link_end
+            f'</span>')
 
 # NOK
-def get_file_code($type, $text, $sort_button, $base):
-
-    global args
-
-    result = $text
-    link = None
-    if $sort_button:
-        if $type == $HEAD_NO_DETAIL:
-            link = f"index.{args.html_ext}"
-        else:
-            link = f"index-detail.{args.html_ext}"
-    result += get_sort_code($link, "Sort by name", $base);
-
-    return result
-
-# NOK
-def get_line_code($type, $sort_type, $text, $sort_button, $base):
-
-    global args
-
-    result = $text
-    my $sort_link;
-    if ($type == $HEAD_NO_DETAIL) {
-        # Just text
-        if ($sort_button) {
-            $sort_link = f"index-sort-l.{args.html_ext}"
-        }
-    } elsif ($type == $HEAD_DETAIL_HIDDEN) {
-        # Text + link to detail view
-        $result += ' ( <a class="detail" href="index-detail'.
-                   $fileview_sortname[$sort_type].'.'.$html_ext.
-                   '">show details</a> )';
-        if ($sort_button) {
-            $sort_link = f"index-sort-l.{args.html_ext}"
-        }
-    else:
-        # Text + link to standard view
-        $result += ' ( <a class="detail" href="index'.
-                   $fileview_sortname[$sort_type].'.'.$html_ext.
-                   '">hide details</a> )';
-        if ($sort_button) {
-            $sort_link = f"index-detail-sort-l.{args.html_ext}"
-        }
-    }
-    # Add sort button
-    result += get_sort_code($sort_link, "Sort by line coverage", $base);
-
-    return result
-
-# NOK
-def get_func_code($type, $text, $sort_button, $base):
-
-    global args
-
-    result = $text
-    link = None
-    if $sort_button:
-        if $type == $HEAD_NO_DETAIL:
-            link = f"index-sort-f.{args.html_ext}"
-        else:
-            link = f"index-detail-sort-f.{args.html_ext}"
-    result += get_sort_code($link, "Sort by function coverage", $base);
-
-    return result
-
-# NOK
-def get_br_code($type, $text, $sort_button, $base):
-
-    global args
-
-    result = $text
-    link = None
-    if $sort_button:
-        if $type == $HEAD_NO_DETAIL:
-            link = f"index-sort-b.{args.html_ext}"
-        else:
-            link = f"index-detail-sort-b.{args.html_ext}"
-    result += get_sort_code(link, "Sort by branch coverage", $base)
-
-    return result
-
-# NOK
-def write_file_table(HTML_HANDLE,
+def write_file_table(html_handle,
                      base_dir,    
                      overview,    
                      testhash,    
                      testfnchash, 
                      testbrhash,  
                      fileview,    
-                     sort_type):
+                     sort_type: int):
 
-    # write_file_table(filehandle, base_dir, overview, testhash, testfnchash,
+    # write_file_table(html_handle, base_dir, overview, testhash, testfnchash,
     #                  testbrhash, fileview, sort_type)
     #
     # Write a complete file table. OVERVIEW is a reference to a hash containing
@@ -2846,97 +2624,73 @@ def write_file_table(HTML_HANDLE,
 
     global test_description
 
-    my $filename;
     my $bar_graph;
-    my $hit;
-    my $found;
-    my $fn_found;
-    my $fn_hit;
-    my $br_found;
-    my $br_hit;
-    my $page_link;
     my $testname;
-    my $testdata;
     my $testfncdata;
     my $testbrdata;
     my %affecting_tests;
-    my $line_code = "";
-    my $func_code;
-    my $br_code;
-    my $file_code;
-    my @head_columns;
 
     # Determine HTML code for column headings
-    if (($base_dir != "") and $show_details)
-    {
+    if $base_dir != "" and $show_details:
         my $detailed = keys(%{$testhash});
+        view_type = HEAD_DETAIL_HIDDEN if $detailed else HEAD_NO_DETAIL
 
-        $file_code = get_file_code($detailed ? $HEAD_DETAIL_HIDDEN :
-                                   $HEAD_NO_DETAIL,
-                                   $fileview ? "Filename" : "Directory",
-                                   $sort and $sort_type != SORT_FILE,
+        file_code = get_file_code(view_type,
+                                   "Filename" if $fileview else "Directory",
+                                   $sort and sort_type != SORT_FILE,
                                    $base_dir);
-        $line_code = get_line_code($detailed ? $HEAD_DETAIL_SHOWN :
-                                   $HEAD_DETAIL_HIDDEN,
-                                   $sort_type,
-                                   "Line Coverage",
-                                   $sort and $sort_type != SORT_LINE,
+        line_code = get_line_code(HEAD_DETAIL_SHOWN if $detailed else HEAD_DETAIL_HIDDEN,
+                                   sort_type, "Line Coverage",
+                                   $sort and sort_type != SORT_LINE,
                                    $base_dir);
-        $func_code = get_func_code($detailed ? $HEAD_DETAIL_HIDDEN :
-                                   $HEAD_NO_DETAIL,
-                                   "Functions",
-                                   $sort and $sort_type != SORT_FUNC,
-                                   $base_dir);
-        $br_code = get_br_code($detailed ? $HEAD_DETAIL_HIDDEN :
-                               $HEAD_NO_DETAIL,
-                               "Branches",
-                               $sort and $sort_type != SORT_BRANCH,
-                               $base_dir);
     else:
-        $file_code = get_file_code($HEAD_NO_DETAIL,
-                                   $fileview ? "Filename" : "Directory",
-                                   $sort and $sort_type != SORT_FILE,
+        view_type = HEAD_NO_DETAIL
+        file_code = get_file_code(view_type, "Filename" if $fileview else "Directory",
+                                   $sort and sort_type != SORT_FILE,
                                    $base_dir);
-        $line_code = get_line_code($HEAD_NO_DETAIL, $sort_type, "Line Coverage",
-                                   $sort and $sort_type != SORT_LINE,
+        line_code = get_line_code(view_type, sort_type, "Line Coverage",
+                                   $sort and sort_type != SORT_LINE,
                                    $base_dir);
-        $func_code = get_func_code($HEAD_NO_DETAIL, "Functions",
-                                   $sort and $sort_type != SORT_FUNC,
-                                   $base_dir);
-        $br_code = get_br_code($HEAD_NO_DETAIL, "Branches",
-                               $sort and $sort_type != SORT_BRANCH,
+    func_code = get_func_code(view_type,
+                               "Functions",
+                               $sort and sort_type != SORT_FUNC,
                                $base_dir);
-    }
-    push(@head_columns, [ $line_code, 3 ]);
-    push(@head_columns, [ $func_code, 2]) if ($fn_coverage);
-    push(@head_columns, [ $br_code, 2]) if ($br_coverage);
+    bran_code = get_bran_code(view_type,
+                               "Branches",
+                               $sort and sort_type != SORT_BRANCH,
+                               $base_dir);
 
-    write_file_table_prolog(HTML_HANDLE, $file_code, @head_columns)
+    head_columns = []
+    push(head_columns, [ line_code, 3])
+    if $fn_coverage:
+        push(head_columns, [ func_code, 2])
+    if $br_coverage:
+        push(head_columns, [ bran_code, 2])
 
-    for $filename in get_sorted_keys($overview, $sort_type):
-    {
-        my @columns;
-        ($found, $hit, $fn_found, $fn_hit, $br_found, $br_hit,
-         $page_link) = @{$overview->{$filename}};
+    write_file_table_prolog(html_handle, file_code, head_columns)
 
+    for filename in get_sorted_keys($overview, sort_type):
+
+        $testdata    = $testhash[filename]
+        $testfncdata = $testfnchash[filename]
+        $testbrdata  = $testbrhash[filename]
+
+        ($found,    $hit,
+         fn_found, fn_hit,
+         br_found, br_hit,
+         page_link) = overview[filename]
+
+        columns = []
         # Line coverage
-        push(@columns, [$found, $hit, $med_limit, $hi_limit, 1]);
+        push(columns, [$found, $hit, $med_limit, $hi_limit, 1]);
         # Function coverage
-        if ($fn_coverage) {
-            push(@columns, [$fn_found, $fn_hit, $fn_med_limit,
-                    $fn_hi_limit, 0]);
-        }
+        if $fn_coverage:
+            push(columns, [$fn_found, $fn_hit, $fn_med_limit, $fn_hi_limit, 0])
         # Branch coverage
-        if ($br_coverage) {
-            push(@columns, [$br_found, $br_hit, $br_med_limit,
-                    $br_hi_limit, 0]);
-        }
-        write_file_table_entry(HTML_HANDLE, $base_dir, $filename,
-                               $page_link, @columns);
+        if $br_coverage:
+            push(columns, [$br_found, $br_hit, $br_med_limit, $br_hi_limit, 0])
 
-        $testdata = $testhash->{$filename};
-        $testfncdata = $testfnchash->{$filename};
-        $testbrdata = $testbrhash->{$filename};
+        write_file_table_entry(html_handle, $base_dir, filename, page_link, columns)
 
         # Check whether we should write test specific coverage
         # as well
@@ -2949,33 +2703,252 @@ def write_file_table(HTML_HANDLE,
         if ! %affecting_tests: continue
 
         foreach $testname (keys(%affecting_tests))
-        {
-            my @results;
+            my @results = []
             ($found, $hit, $fn_found, $fn_hit, $br_found, $br_hit) =
                 split(",", $affecting_tests{$testname});
 
             # Insert link to description of available
             if $test_description{$testname}:
-                $testname = ("<a href=\"$base_dir"
-                             "descriptions.$html_ext#$testname\">"
-                             "$testname</a>")
+                $testname = ('<a href=\"$base_dir"
+                             "descriptions.$html_ext#$testname\">'
+                             '$testname</a>')
 
             push(@results, [$found, $hit]);
             push(@results, [$fn_found, $fn_hit]) if ($fn_coverage);
             push(@results, [$br_found, $br_hit]) if ($br_coverage);
-            write_file_table_detail_entry(HTML_HANDLE, $testname, @results)
-        }
-    }
+            write_file_table_detail_entry(html_handle, $testname, @results)
 
-    write_file_table_epilog(HTML_HANDLE)
+    write_file_table_epilog(html_handle)
+
+# NOK
+def get_file_code($type, $text, sort_button: bool, $base):
+
+    global args
+
+    result = $text
+    link = None
+    if sort_button:
+        if $type == HEAD_NO_DETAIL:
+            link = f"index.{args.html_ext}"
+        else:
+            link = f"index-detail.{args.html_ext}"
+    result += get_sort_code($link, "Sort by name", $base);
+
+    return result
+
+# NOK
+def get_line_code($type, $sort_type: int, $text, sort_button: bool, $base):
+
+    global args
+
+    result = $text
+    my $sort_link;
+    if $type == HEAD_NO_DETAIL:
+        # Just text
+        if sort_button:
+            $sort_link = f"index-sort-l.{args.html_ext}"
+    elif $type == HEAD_DETAIL_HIDDEN:
+        # Text + link to detail view
+        $result += ' ( <a class="detail" href="index-detail'.
+                   $fileview_sortname[$sort_type].'.'.$html_ext.'">show details</a> )'
+        if sort_button:
+            $sort_link = f"index-sort-l.{args.html_ext}"
+    else:
+        # Text + link to standard view
+        $result += ' ( <a class="detail" href="index'.
+                   $fileview_sortname[$sort_type].'.'.$html_ext.'">hide details</a> )'
+        if sort_button:
+            $sort_link = f"index-detail-sort-l.{args.html_ext}"
+    # Add sort button
+    result += get_sort_code($sort_link, "Sort by line coverage", $base);
+
+    return result
+
+# NOK
+def get_func_code($type, $text, sort_button: bool, $base):
+
+    global args
+
+    result = $text
+    link = None
+    if sort_button:
+        if $type == HEAD_NO_DETAIL:
+            link = f"index-sort-f.{args.html_ext}"
+        else:
+            link = f"index-detail-sort-f.{args.html_ext}"
+    result += get_sort_code($link, "Sort by function coverage", $base);
+
+    return result
+
+# NOK
+def get_bran_code($type, $text, sort_button: bool, $base):
+
+    global args
+
+    result = $text
+    link = None
+    if sort_button:
+        if $type == HEAD_NO_DETAIL:
+            link = f"index-sort-b.{args.html_ext}"
+        else:
+            link = f"index-detail-sort-b.{args.html_ext}"
+    result += get_sort_code(link, "Sort by branch coverage", $base)
+
+    return result
+
+# NOK
+def write_file_table_prolog(html_handle, file_heading: str, columns: List[Tuple[str, int]]):
+    """Write heading for file table."""
+    # write_file_table_prolog(handle, file_heading, [heading, num_cols, ...])
+
+    if   len(columns) == 1: width = 20
+    elif len(columns) == 2: width = 10
+    elif len(columns) >  2: width = 8
+    else:                   width = 0
+
+    num_columns = 0
+    for heading, cols in columns:
+        num_columns += cols
+
+    file_width = 100 - num_columns * width
+
+    # Table definition
+    write_html(html_handle, <<END_OF_HTML)
+      <center>
+      <table width="80%" cellpadding=1 cellspacing=1 border=0>
+
+        <tr>
+          <td width="{file_width}%"><br></td>
+END_OF_HTML
+    # Empty first row
+    for heading, cols in columns:
+        for _ in range(cols):
+            write_html(html_handle, <<END_OF_HTML)
+          <td width="{width}%"></td>
+END_OF_HTML
+    # Next row
+    write_html(html_handle, <<END_OF_HTML)
+        </tr>
+
+        <tr>
+          <td class="tableHead">{file_heading}</td>
+END_OF_HTML
+    # Heading row
+    for heading, cols in columns:
+        colspan = f" colspan={cols}" if cols > 1 else ""
+        write_html(html_handle, <<END_OF_HTML);
+          <td class="tableHead"{colspan}>$heading</td>
+END_OF_HTML
+    write_html(html_handle, <<END_OF_HTML);
+        </tr>
+END_OF_HTML
+
+# NOK
+def write_file_table_epilog(html_handle):
+    """Write end of file table HTML code."""
+    # !!! read from html/file_table_epilog.html
+    write_html(html_handle, <<END_OF_HTML)
+END_OF_HTML
+
+# NOK
+def write_file_table_entry(html_handle, $base_dir, filename: str, page_link: Optional[str], @entries):
+    # write_file_table_entry(handle, base_dir, filename, page_link,
+    #             ([ found, hit, med_limit, hi_limit, graph ], ..)
+    #
+    # Write an entry of the file table.
+    #
+
+    esc_filename = escape_html(filename)
+    # Add link to source if provided
+    if page_link isn not None and page_link != "":
+        file_code = f'<a href="$page_link">{esc_filename}</a>'
+    else:
+        file_code = esc_filename
+
+    # First column: filename
+    write_html(html_handle, <<END_OF_HTML);
+        <tr>
+          <td class="coverFile">{file_code}</td>
+END_OF_HTML
+    # Columns as defined
+    for $entry in @entries:
+    {
+        my ($found, $hit, $med, $hi, $graph) = @{$entry};
+        my $bar_graph;
+        my $class;
+        my $rate;
+
+        # Generate bar graph if requested
+        if ($graph) {
+            $bar_graph = get_bar_graph_code($base_dir, $found, $hit)
+            write_html(html_handle, <<END_OF_HTML);
+          <td class="coverBar" align="center">
+            $bar_graph
+          </td>
+END_OF_HTML
+        }
+
+        # Get rate color and text
+        if $found == 0:
+            $rate = "-";
+            $class = "Hi";
+        else:
+            $rate = rate($hit, $found, "&nbsp;%")
+            $class = $rate_name[classify_rate($found, $hit, $med, $hi)];
+
+        if $opt_missed:
+            # Show negative number of items without coverage
+            $hit = -($found - $hit);
+
+        write_html(html_handle, <<END_OF_HTML)
+          <td class="coverPer$class">$rate</td>
+          <td class="coverNum$class">$hit / $found</td>
+END_OF_HTML
+    }
+    # End of row
+    write_html(html_handle, <<END_OF_HTML)
+        </tr>
+END_OF_HTML
+
+# NOK
+def write_file_table_detail_entry(html_handle, $test, entries: List[]):
+    #
+    # write_file_table_detail_entry(html_handle, test_name, ([found, hit], ...))
+    #
+    # Write entry for detail section in file table.
+    #
+
+    if $test == "":
+        $test = "<span style=\"font-style:italic\">&lt;unnamed&gt;</span>"
+    elif ($test =~ /^(.*),diff$/):
+        $test = $1." (converted)"
+
+    # Testname
+    write_html(html_handle, <<END_OF_HTML)
+        <tr>
+          <td class="testName" colspan=2>$test</td>
+END_OF_HTML
+    # Test data
+    for $found, $hit in entries:
+        $rate = rate($hit, $found, "&nbsp;%")
+
+        write_html(html_handle, <<END_OF_HTML);
+          <td class="testPer">$rate</td>
+          <td class="testNum">$hit&nbsp;/&nbsp;$found</td>
+END_OF_HTML
+
+    write_html(html_handle, <<END_OF_HTML)
+        </tr>
+
+END_OF_HTML
 
 # NOK
 def get_sorted_keys($hash, sort_type: int) -> List[???]:
-    # get_sorted_keys(hash_ref, sort_type)
-    #
-    # hash_ref: filename -> stats
-    # stats: [ ln_found, ln_hit, fn_found, fn_hit, br_found, br_hit,
-    #          link_name, line_rate, fn_rate, br_rate ]
+    """
+    hash:  filename -> stats
+    stats: [ ln_found, ln_hit, fn_found, fn_hit, br_found, br_hit,
+             link_name, line_rate, fn_rate, br_rate ]
+    """
     if sort_type == SORT_FILE:
         # Sort by name
         return sorted($hash.keys())
@@ -2990,51 +2963,42 @@ def get_sorted_by_missed($hash, sort_type: int) -> List[???]:
     if sort_type == SORT_LINE:
         # Sort by number of instrumented lines without coverage
         return sorted(
-            {
-                ($hash->{$b}[0] - $hash->{$b}[1]) <=>
-                ($hash->{$a}[0] - $hash->{$a}[1])
-            } $hash.keys())
+            { ($hash->{$b}[0] - $hash->{$b}[1]) <=> ($hash->{$a}[0] - $hash->{$a}[1]) } $hash.keys()) # NOK
     elif sort_type == SORT_FUNC:
         # Sort by number of instrumented functions without coverage
         return sorted(
-            {
-                ($hash->{$b}[2] - $hash->{$b}[3]) <=>
-                ($hash->{$a}[2] - $hash->{$a}[3])
-            } $hash.keys())
+            { ($hash->{$b}[2] - $hash->{$b}[3]) <=> ($hash->{$a}[2] - $hash->{$a}[3]) } $hash.keys()) # NOK
     elif sort_type == SORT_BRANCH:
         # Sort by number of instrumented branches without coverage
         return sorted(
-            {
-                ($hash->{$b}[4] - $hash->{$b}[5]) <=>
-                ($hash->{$a}[4] - $hash->{$a}[5])
-            } $hash.keys())
+            { ($hash->{$b}[4] - $hash->{$b}[5]) <=> ($hash->{$a}[4] - $hash->{$a}[5]) } $hash.keys()) # NOK
 
 # NOK
 def get_sorted_by_rate($hash, sort_type: int) -> List[???]:
 
     if sort_type == SORT_LINE:
         # Sort by line coverage
-        return sorted({$hash->{$a}[7] <=> $hash->{$b}[7]} $hash.keys())
+        return sorted({$hash->{$a}[7] <=> $hash->{$b}[7]} $hash.keys()) # NOK
     elif sort_type == SORT_FUNC:
         # Sort by function coverage;
-        return sorted({$hash->{$a}[8] <=> $hash->{$b}[8]} $hash.keys())
+        return sorted({$hash->{$a}[8] <=> $hash->{$b}[8]} $hash.keys()) # NOK
     elif sort_type == SORT_BRANCH:
         # Sort by br coverage;
-        return sorted({$hash->{$a}[9] <=> $hash->{$b}[9]} $hash.keys())
+        return sorted({$hash->{$a}[9] <=> $hash->{$b}[9]} $hash.keys()) # NOK
 
 
-def get_affecting_tests(testlndata:  Dict[str, Dict[int,    int]],
-                        testfncdata: Dict[str, Dict[object, int]],
+def get_affecting_tests(test_line_data:  Dict[str, Dict[int,    int]],
+                        test_func_data: Dict[str, Dict[object, int]],
                         testbrdata:  Dict[str, Dict[int,    str]]) -> Dict[str, str]:
-    """testlndata contains a mapping filename -> (linenumber -> exec count).
+    """test_line_data contains a mapping filename -> (linenumber -> exec count).
     Return a hash containing mapping filename -> "lines found, lines hit, ..."
     for each filename which has a nonzero hit count.
     """
     result = {}
-    for testname in testlndata.keys():
+    for testname in test_line_data.keys():
         # Get (line number -> count) hash for this test case
-        testlncount:  Dict[int,    int] = testlndata[testname]
-        testfnccount: Dict[object, int] = testfncdata[testname]
+        testlncount:  Dict[int,    int] = test_line_data[testname]
+        testfnccount: Dict[object, int] = test_func_data[testname]
         testbrcount:  Dict[int,    str] = testbrdata[testname]
 
         # Calculate sum
@@ -3055,7 +3019,7 @@ def write_source(html_handle,
                  converted: Set[int],
                  $funcdata,
                  $sumbrcount) -> List:
-    # write_source(filehandle, source_filename, count_data, checksum_data,
+    # write_source(html_handle, source_filename, count_data, checksum_data,
     #              converted_data, func_data, sumbrcount)
     #
     # Write an HTML view of a source code file. Returns a list containing
@@ -3123,25 +3087,16 @@ def write_source_prolog(html_handle):
     """Write start of source code table."""
     global options
 
-    my $lineno_heading = "         "
-    my $branch_heading = ""
-    my $line_heading   = fmt_centered(options.line_field_width, "Line data")
-    my $source_heading = " Source code"
-
-    if $br_coverage:
-        $branch_heading = fmt_centered(options.br_field_width, "Branch data") + " "
+    lineno_heading = "         "
+    branch_heading = ((fmt_centered(options.br_field_width, "Branch data") + " ")
+                       if $br_coverage else "")
+    line_heading   = fmt_centered(options.line_field_width, "Line data") + " "
+    source_heading = " Source code"
 
     # *************************************************************
 
+    # !!! read from html/source_prolog.html
     write_html(html_handle, <<END_OF_HTML)
-      <table cellpadding=0 cellspacing=0 border=0>
-        <tr>
-          <td><br></td>
-        </tr>
-        <tr>
-          <td>
-<pre class="sourceHeading">${lineno_heading}${branch_heading}${line_heading} ${source_heading}</pre>
-<pre class="source">
 END_OF_HTML
 
 # NOK
@@ -3253,7 +3208,7 @@ def get_branch_html(brdata: Optional[str]) -> List[str]:
             {
                 # Start a new line
                 if (($line_len + 1 <= options.br_field_width) and
-                    scalar(@{$line}) > 0 and !$line->[scalar(@$line) - 1][BR_CLOSE]):
+                    len(@{$line}) > 0 and !$line->[len(@$line) - 1][BR_CLOSE]):
                     # Try to align branch symbols to be in one # row
                     push(@{$line}, " ");
                 lines.append($line)
@@ -3409,80 +3364,6 @@ def funcview_get_sorted($funcdata, $sumfncdata, sort_type: int):
         return sorted({ $sumfncdata->{$b} == $sumfncdata->{$a}
                         ? $a cmp $b : $sumfncdata->{$a} <=> $sumfncdata->{$b}
                       } keys(%{$sumfncdata}))
-
-# NOK
-def write_function_table(HTML_HANDLE,
-                         $source,
-                         $sumcount,   $funcdata,
-                         $sumfncdata, $testfncdata,
-                         $sumbrcount, $testbrdata,
-                         $name, $base, $type):
-    # write_function_table(filehandle, source_file, sumcount, funcdata,
-    #               sumfnccount, testfncdata, sumbrcount, testbrdata,
-    #               base_name, base_dir, sort_type)
-    #
-    # Write an HTML table listing all functions in a source file, including
-    # also function call counts and line coverages inside of each function.
-    #
-    # Die on error.
-
-    my $func;
-    my $func_code;
-    my $count_code;
-    my $demangle;
-
-    # Get HTML code for headings
-    $func_code  = funcview_get_func_code($name,  $base, $type)
-    $count_code = funcview_get_count_code($name, $base, $type)
-    write_html(HTML_HANDLE, <<END_OF_HTML)
-      <center>
-      <table width="60%" cellpadding=1 cellspacing=1 border=0>
-        <tr><td><br></td></tr>
-        <tr>
-          <td width="80%" class="tableHead">$func_code</td>
-          <td width="20%" class="tableHead">$count_code</td>
-        </tr>
-END_OF_HTML
-
-    # Get demangle translation hash
-    if args.demangle_cpp:
-        $demangle = demangle_list(sorted($funcdata.keys()))
-
-    # Get a sorted table
-    for $func in funcview_get_sorted($funcdata, $sumfncdata, $type):
-    {
-        if ! defined($funcdata->{$func}):
-            continue
-
-        my $startline = $funcdata->{$func} - $func_offset;
-        my $name      = $func;
-        my $count     = $sumfncdata->{$name};
-
-        my $countstyle;
-
-        # Replace function name with demangled version if available
-        if (exists($demangle->{$name})):
-            $name = $demangle->{$name}
-
-        # Escape special characters
-        $name = escape_html($name);
-
-        if $startline < 1:
-            $startline = 1
-        $countstyle = "coverFnLo" if $count == 0 else "coverFnHi"
-
-        write_html(HTML_HANDLE, <<END_OF_HTML)
-        <tr>
-              <td class="coverFn"><a href="$source#$startline">$name</a></td>
-              <td class="$countstyle">$count</td>
-            </tr>
-END_OF_HTML
-    }
-    write_html(HTML_HANDLE, <<END_OF_HTML)
-      </table>
-      <br>
-      </center>
-END_OF_HTML
 
 # NOK
 def info(printf_parameter):
