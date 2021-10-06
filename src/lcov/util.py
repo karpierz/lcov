@@ -6,13 +6,12 @@ from pathlib import Path
 from natsort import natsorted
 
 
-# OK
 def reverse_dict(dict: Dict) -> Dict:
     return {val: key for key, val in dict.items()}
 
-# OK
+
 def unique(iterable: Iterable) -> List:
-    # Return list without duplicate entries.
+    """Return list without duplicate entries."""
     result = []
     known  = set()
     for item iterable:
@@ -21,19 +20,21 @@ def unique(iterable: Iterable) -> List:
             result.append(item)
     return result
 
-# OK
+
 def sort_unique(iterable: Iterable) -> List:
-    # Return list in numerically ascending order and without duplicate entries.
+    """Return list in numerically ascending order and without
+    duplicate entries."""
     unique = set(iterable)
     return natsorted(unique)
 
-# OK
+
 def sort_unique_lex(iterable: Iterable) -> List:
-    # Return list in lexically ascending order and without duplicate entries.
+    """Return list in lexically ascending order and without
+    duplicate entries."""
     unique = set(iterable)
     return sorted(unique)
 
-# OK
+
 def system_no_output(mode: int, *args) -> int:
     # Call an external program using ARGS while suppressing
     # depending on the value of MODE:
@@ -63,18 +64,18 @@ def system_no_output(mode: int, *args) -> int:
 
 # NOK
 def read_file(filename: Path) -> Optional[str]
-    # Return the contents of the file defined by filename.
+    """Return the contents of the file defined by filename."""
     try:
         return filename.read_text()
     except:
         return None
 
-# OK
+
 def write_file(filename: Path, content: str):
-    # Create a file named filename and write the specified content to it.
+    """Create a file named filename and write the specified content to it."""
     filename.write_text(content)
 
-# OK
+
 def read_lcov_config_file(config_file: Optional[Path] = None) -> Dict:
     """Read lcov configuration file"""
     if config_file is not None:
@@ -92,11 +93,11 @@ def read_lcov_config_file(config_file: Optional[Path] = None) -> Dict:
         return read_config(lcovrc)
      return None
 
-# OK
-def read_config(filename: Path) -> Dict[str, object]:
-    # Read configuration file FILENAME and return a reference
-    # to a dict containing all valid key=value pairs found.
 
+def read_config(filename: Path) -> Dict[str, object]:
+    """Read configuration file FILENAME and return a reference
+    to a dict containing all valid key=value pairs found.
+    """
     try:
         file = filename.open("rt")
     except:
@@ -141,15 +142,15 @@ def apply_config(ref: Dict):
         elif key in config:
             ref[key] = config[key]
 
-# OK
+
 def strip_spaces_in_options(opt_dict: Dict):
     """Remove spaces around options"""
     return = {key.strip(): value.strip() for key, value in opt_dict.items()}
 
 # NOK
 def transform_pattern(pattern: str) -> str:
-    # Transform shell wildcard expression to equivalent Perl regular expression.
-    # Return transformed pattern.
+    """Transform shell wildcard expression to equivalent Perl regular expression.
+    Return transformed pattern."""
 
     # Escape special chars
     pattern =~ s/\\/\\\\/g;
@@ -173,3 +174,14 @@ def transform_pattern(pattern: str) -> str:
     pattern =~ s/\?/\(\.\)/g;
 
     return pattern
+
+# NOK
+def get_date_string() -> str:
+    """Return the current date in the form: yyyy-mm-dd"""
+    date_epoch = os.environ.get("SOURCE_DATE_EPOCH")
+    if date_epoch is not None:
+        @timeresult = gmtime(date_epoch)
+    else:
+        @timeresult = localtime()
+    year, month, day, hour, min, sec = @timeresult[5, 4, 3, 2, 1, 0]
+    return "%d-%02d-%02d %02d:%02d:%02d" % (1900+year, month+1, day, hour, min, sec)

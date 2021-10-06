@@ -40,15 +40,18 @@ def genpng_process_file(filename: Path, out_filename: Path,
             # Assume gcov text format
             for line in file:
                 match = re.match(r"^\t\t(.*)$", line)
+
                 if match:
                     # Uninstrumented line
                     source.append(":{}".format(match.group(1)))
                     continue
+
                 match = re.match(r"^      ######    (.*)$", line)
                 if match:
                     # Line with zero execution count
                     source.append("0:{}".format(match.group(1)))
                     continue
+
                 match = re.match(r"^( *)(\d*)    (.*)$", line)
                 if match:
                     # Line with positive execution count

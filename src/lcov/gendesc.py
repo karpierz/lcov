@@ -33,15 +33,16 @@ lcov_url     = "http://ltp.sourceforge.net/coverage/lcov.php"
 
 
 def gen_description(input_filename: Path, output_filename: Optional[Path]):
-    # Read text file INPUT_FILENAME and convert the contained description
-    # to a format as understood by genhtml, i.e.
-    #
-    #    TN:<test name>
-    #    TD:<test description>
-    #
-    # If defined, write output to OUTPUT_FILENAME, otherwise to stdout.
-    #
-    # Die on error.
+    """Read text file INPUT_FILENAME and convert the contained description
+    to a format as understood by genhtml, i.e.
+    
+       TN:<test name>
+       TD:<test description>
+    
+    If defined, write output to OUTPUT_FILENAME, otherwise to stdout.
+    
+    Die on error.
+    """
     try:
         finput = input_filename.open("rt")
     except:
@@ -57,6 +58,7 @@ def gen_description(input_filename: Path, output_filename: Optional[Path]):
         empty_line = "ignore"
         for line in finput:
             line = line.rstrip("\n")
+
             match = re.match(r"^(\w[\w-]*)(\s*)$", line)
             if match:
                 # Matched test name
@@ -65,6 +67,7 @@ def gen_description(input_filename: Path, output_filename: Optional[Path]):
                 print("TN: {}".format(match.group(1)), file=foutput)
                 empty_line = "ignore"
                 continue
+
             match = re.match(r"^(\s+)(\S.*?)\s*$", line)
             if match:
                 # Matched test description
@@ -74,6 +77,7 @@ def gen_description(input_filename: Path, output_filename: Optional[Path]):
                 print("TD: {}".format(match.group(2)), file=foutput)
                 empty_line = "observe"
                 continue
+
             match = re.match(r"^\s*$", line)
             if match:
                 # Matched empty line to preserve paragraph separation

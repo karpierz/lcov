@@ -56,6 +56,7 @@ from typing import List
 import argparse
 import sys
 import re
+import shutil
 from pathlib import Path
 
 from .util import reverse_dict
@@ -68,12 +69,6 @@ our $lcov_url        = "http://ltp.sourceforge.net/coverage/lcov.php";
 
 # Specify coverage rate default precision
 default_precision = 1
-
-# Directory containing gcov kernel files
-gcov_dir: Optional[Path] = None
-
-# Where to create temporary directories
-tmp_dir: Optional = None
 
 # Internal constants
 GKV_PROC = 0  # gcov-kernel data in /proc via external patch
@@ -93,20 +88,8 @@ BR_ADD = 1
 from .util import strip_spaces_in_options
 sub print_usage(*);
 sub check_options();
-sub userspace_reset();
-sub kernel_reset();
-sub kernel_capture();
-sub kernel_capture_initial();
-sub package_capture();
-sub read_info_file($);
-sub set_info_entry($$$$$$$$$;$$$$$$);
-sub add_counts($$);
-sub merge_checksums($$$);
-sub extract();
 sub remove();
 sub list();
-sub get_common_filename($$);
-sub read_diff($);
 sub diff();
 from .util import write_file
 from .util import apply_config
@@ -116,66 +99,69 @@ from .util import transform_pattern
 from .util import system_no_output
 
 # Global variables & initialization
-our @directory;        # Specifies where to get coverage data from
-kernel_directory: Optional[List] = None  # If set, captures only from specified kernel subdirs
-our @add_tracefile;    # If set, reads in and combines all files in list
+options.gcov_dir:       Optional[Path] = None  # Directory containing gcov kernel files
+options.tmp_dir:        Optional[Path] = None  # Where to create temporary directories
+args.directory:         Optional[List] = None  # Specifies where to get coverage data from
+args.kernel_directory:  Optional[List] = None  # If set, captures only from specified kernel subdirs
+args.add_tracefile:     Optional[List] = None  # If set, reads in and combines all files in list
 our $list;        # If set, list contents of tracefile
-our $extract;        # If set, extracts parts of tracefile
-our $remove;        # If set, removes parts of tracefile
-our $diff;        # If set, modifies tracefile according to diff
+args.extract:           Optional[str] = None  # If set, extracts parts of tracefile
+args.remove:            Optional[str] = None  # If set, removes  parts of tracefile
+args.diff:              Optional[str] = None  # If set, modifies tracefile according to diff
 our $reset;        # If set, reset all coverage data to zero
 our $capture;        # If set, capture data
-output_filename: Optional[str] = None  # Name for file to write coverage data to
+args.output_filename:   Optional[str] = None  # Name for file to write coverage data to
 our $test_name = "";    # Test case name
-our opt.quiet = "";    # If set, suppress information messages
+args.quiet: bool = False  # If set, suppress information messages
 our $help;        # Help option flag
 our $version;        # Version option flag
-our $convert_filenames;    # If set, convert filenames when applying diff
-our $strip;        # If set, strip leading directories when applying diff
+args.convert_filenames: bool =  False  # If set, convert filenames when applying diff
+args.strip:             Optional[int] = None  # If set, strip leading directories when applying diff
 our $temp_dir_name;    # Name of temporary directory
 our $cwd = `pwd`;    # Current working directory
-our $follow;        # If set, indicates that find shall follow links
+args.follow:            bool =  False  # If set, indicates that find shall follow links
 our $diff_path = "";    # Path removed from tracefile when applying diff
-opt.fail_under_lines: int = 0
-our $base_directory;    # Base directory (cwd of gcc during compilation)
-our $checksum;        # If set, calculate a checksum for each line
-our $no_checksum;    # If set, don't calculate a checksum for each line
-our $compat_libtool;    # If set, indicates that libtool mode is to be enabled
-our $no_compat_libtool;    # If set, indicates that libtool mode is to be disabled
-our $gcov_tool;
+options.fail_under_lines: int = 0
+args.base_directory:    Optional[str] = None  # Base directory (cwd of gcc during compilation)
+args.checksum;        # If set, calculate a checksum for each line
+args.no_checksum:       Optional[bool] = None  # If set, don't calculate a checksum for each line
+args.compat_libtool:    Optional[bool] = None  # If set, indicates that libtool mode is to be enabled
+args.no_compat_libtool: Optional[bool] = None  # If set, indicates that libtool mode is to be disabled
+args.gcov_tool:         Optional[str] = None
 our opt.ignore_errors;
-our $initial;
-our @include_patterns; # List of source file patterns to include
-our @exclude_patterns; # List of source file patterns to exclude
-opt.no_recursion = False
-to_package: Optional[Path] = None
+args.initial:           bool = False
+args.include_patterns:  List[str] = [] # List of source file patterns to include
+args.exclude_patterns:  List[str] = [] # List of source file patterns to exclude
+opt.no_recursion:       bool = False
+args.to_package:        Optional[Path] = None
 our $from_package;
 our $maxdepth;
-our $no_markers;
+args.no_markers:        bool = False
 our $config;        # Configuration file contents
 chomp($cwd);
-temp_dirs: List[Path] = []
-our $gcov_gkv;        # gcov kernel support version found on machine
+temp_dirs:              List[Path] = []
+gcov_gkv:               str = ""  # gcov kernel support version found on machine
 our opt.derive_func_data;
 our opt.debug;
-our opt.list_full_path;
-our opt.no_list_full_path;
-our $opt_list_width = 80;
-our $opt_list_truncate_max = 20;
-our opt.external;
-our opt.no_external;
+options.list_full_path: Optional[bool] = None
+args.no_list_full_path: Optional[bool] = None
+options.list_width:        int = 80
+options.list_truncate_max: int = 20
+args.external:         Optional[bool] = None
+args.no_external:      Optional[bool] = None
 our opt.config_file;
-our opt.rc = Optional[Dict];
-our @opt_summary;
+our opt.rc:           Optional[Dict];
+args.summary:         Optional[List] = None
 our opt.compat;
-our $ln_overall_found;
-our $ln_overall_hit;
-our $fn_overall_found;
-our $fn_overall_hit;
-our $br_overall_found;
-our $br_overall_hit;
-our $fn_coverage = 1
-our $br_coverage = 0
+options.br_coverage:  bool = False
+options.fn_coverage:  bool = True
+
+ln_overall_found: Optional[int] = None
+ln_overall_hit:   Optional[int] = None
+fn_overall_found: Optional[int] = None
+fn_overall_hit:   Optional[int] = None
+br_overall_found: Optional[int] = None
+br_overall_hit:   Optional[int] = None
 
 #
 # Code entry point
@@ -183,88 +169,89 @@ our $br_coverage = 0
 
 # Check command line for a configuration file name
 Getopt::Long::Configure("pass_through", "no_auto_abbrev")
-GetOptions("config-file=s": \opt.config_file,
-           "rc=s%":         \opt.rc);
+GetOptions("config-file=s": \args.config_file,
+           "rc=s%":         \args.rc);
 Getopt::Long::Configure("default");
 
 # Remove spaces around rc options
-opt.rc = strip_spaces_in_options(opt.rc)
+args.rc = strip_spaces_in_options(args.rc)
 # Read configuration file if available
-$config = read_lcov_config_file(opt.config_file)
+$config = read_lcov_config_file(args.config_file)
 
-if $config or opt.rc:
+if $config or args.rc:
     # Copy configuration file and --rc values to variables
     apply_config({
-        "lcov_gcov_dir":          \$gcov_dir,
-        "lcov_tmp_dir":           \tmp_dir,
-        "lcov_list_full_path":    \opt.list_full_path,
-        "lcov_list_width":        \$opt_list_width,
-        "lcov_list_truncate_max": \$opt_list_truncate_max,
-        "lcov_branch_coverage":   \$br_coverage,
-        "lcov_function_coverage": \$fn_coverage,
-        "lcov_fail_under_lines":  \opt.fail_under_lines,
+        "lcov_gcov_dir":          \Path(options.gcov_dir),
+        "lcov_tmp_dir":           \options.tmp_dir,
+        "lcov_list_full_path":    \options.list_full_path,
+        "lcov_list_width":        \options.list_width,
+        "lcov_list_truncate_max": \options.list_truncate_max,
+        "lcov_branch_coverage":   \options.br_coverage,
+        "lcov_function_coverage": \options.fn_coverage,
+        "lcov_fail_under_lines":  \options.fail_under_lines,
     })
 
 # Parse command line options
-if (!GetOptions("directory|d|di=s" => \@directory,
-        "add-tracefile|a=s" => \@add_tracefile,
-        "list|l=s" => \$list,
-        "kernel-directory|k=s" => \kernel_directory,
-        "extract|e=s" => \$extract,
-        "remove|r=s" => \$remove,
-        "diff=s" => \$diff,
-        "convert-filenames" => \$convert_filenames,
-        "strip=i" => \$strip,
-        "capture|c" => \$capture,
-        "output-file|o=s" => \output_filename,
-        "test-name|t=s" => \$test_name,
-        "zerocounters|z" => \$reset,
-        "quiet|q" => \opt.quiet,
-        "help|h|?" => \$help,
-        "version|v" => \$version,
-        "follow|f" => \$follow,
-        "path=s" => \$diff_path,
-        "base-directory|b=s" => \$base_directory,
-        "checksum" => \$checksum,
-        "no-checksum" => \$no_checksum,
-        "compat-libtool" => \$compat_libtool,
-        "no-compat-libtool" => \$no_compat_libtool,
-        "gcov-tool=s" => \$gcov_tool,
-        "ignore-errors=s" => \opt.ignore_errors,
-        "initial|i" => \$initial,
-        "include=s" => \@include_patterns,
-        "exclude=s" => \@exclude_patterns,
-        "no-recursion" => \opt.no_recursion,
-        "to-package=s" => \to_package,
-        "from-package=s" => \$from_package,
-        "no-markers" => \$no_markers,
-        "derive-func-data"  => \opt.derive_func_data,
-        "debug"             => \opt.debug,
-        "list-full-path"    => \opt.list_full_path,
-        "no-list-full-path" => \opt.no_list_full_path,
-        "external" => \opt.external,
-        "no-external" => \opt.no_external,
-        "summary=s" => \@opt_summary,
-        "compat=s" => \opt.compat,
-        "config-file=s" => \opt.config_file,
-        "rc=s%" => \opt.rc,
-        "fail-under-lines=s" => \opt.fail_under_lines,
+if (!GetOptions(
+        "directory|d|di=s"     => \args.directory,
+        "add-tracefile|a=s"    => \args.add_tracefile,
+        "list|l=s"             => \$list,
+        "kernel-directory|k=s" => \args.kernel_directory,
+        "extract|e=s"          => \args.extract,
+        "remove|r=s"           => \args.remove,
+        "diff=s"               => \args.diff,
+        "convert-filenames"    => \args.convert_filenames,
+        "strip=i"              => \args.strip,
+        "capture|c"            => \$capture,
+        "output-file|o=s"      => \args.output_filename,
+        "test-name|t=s"        => \$test_name,
+        "zerocounters|z"       => \$reset,
+        "quiet|q"              => \args.quiet,
+        "help|h|?"             => \$help,
+        "version|v"            => \$version,
+        "follow|f"             => \args.follow,
+        "path=s"               => \$diff_path,
+        "base-directory|b=s"   => \args.base_directory,
+        "checksum"             => \args.checksum,
+        "no-checksum"          => \args.no_checksum,
+        "compat-libtool"       => \args.compat_libtool,
+        "no-compat-libtool"    => \args.no_compat_libtool,
+        "gcov-tool=s"          => \args.gcov_tool,
+        "ignore-errors=s"      => \args.ignore_errors,
+        "initial|i"            => \args.initial,
+        "include=s"            => \args.include_patterns,
+        "exclude=s"            => \args.exclude_patterns,
+        "no-recursion"         => \args.no_recursion,
+        "to-package=s"         => \Path(args.to_package),
+        "from-package=s"       => \$from_package,
+        "no-markers"           => \args.no_markers,
+        "derive-func-data"     => \args.derive_func_data,
+        "debug"                => \args.debug,
+        "list-full-path"       => \options.list_full_path,
+        "no-list-full-path"    => \args.no_list_full_path,
+        "external"             => \args.external,
+        "no-external"          => \args.no_external,
+        "summary=s"            => \args.summary,
+        "compat=s"             => \args.compat,
+        "config-file=s"        => \args.config_file,
+        "rc=s%"                => \args.rc,
+        "fail-under-lines=s"   => \options.fail_under_lines,
         )):
     print(f"Use {tool_name} --help to get usage information", file=sys.stderr)
     sys.exit(1)
 
 # Merge options
-if $no_checksum is not None:
-    $checksum = not $no_checksum
-if $no_compat_libtool is not None:
-    $compat_libtool = not $no_compat_libtool
-    $no_compat_libtool = None
-if opt.no_list_full_path is not None:
-    opt.list_full_path = not opt.no_list_full_path
-    del opt.no_list_full_path
-if opt.no_external is not None:
-    opt.external = False
-    del opt.no_external
+if args.no_checksum is not None:
+    args.checksum = not args.no_checksum
+if args.no_compat_libtool is not None:
+    args.compat_libtool = not args.no_compat_libtool
+    args.no_compat_libtool = None
+if args.no_list_full_path is not None:
+    options.list_full_path = not args.no_list_full_path
+    del args.no_list_full_path
+if args.no_external is not None:
+    args.external = False
+    del args.no_external
 
 # Check for help option
 if $help:
@@ -277,44 +264,42 @@ if $version:
     sys.exit(0)
 
 # Check list width option
-if $opt_list_width <= 40:
+if options.list_width <= 40:
     die("ERROR: lcov_list_width parameter out of range (needs to be "
         "larger than 40)\n")
 
 # Normalize --path text
 $diff_path =~ s/\/$//;
 
-$follow = "-follow" if $follow else = ""
-
-$maxdepth = "-maxdepth 1" if opt.no_recursion else ""
+$maxdepth = "-maxdepth 1" if args.no_recursion else ""
 
 # Check for valid options
 check_options()
 
 # Only --extract, --remove and --diff allow unnamed parameters
-if @ARGV && !($extract || $remove || $diff || @opt_summary):
-    die("Extra parameter found: '".join(" ", @ARGV)."'\n".
-        "Use $tool_name --help to get usage information\n")
+if @ARGV and !(args.extract is not None or args.remove is not None or args.diff or args.summary):
+    die("Extra parameter found: '".join(" ", @ARGV)."'\n"
+        f"Use {tool_name} --help to get usage information\n")
 
 # If set, indicates that data is written to stdout
 # Check for output filename
-data_to_stdout: bool = not (output_filename and output_filename != "-")
+data_to_stdout: bool = not (args.output_filename and args.output_filename != "-")
 
 if $capture:
     if data_to_stdout:
         # Option that tells geninfo to write to stdout
-        output_filename = "-"
+        args.output_filename = "-"
 
 # Determine kernel directory for gcov data
-if ! $from_package and ! @directory and ($capture or $reset):
-    gcov_gkv, gcov_dir = setup_gkv()
+if ! $from_package and not args.directory and ($capture or $reset):
+    gcov_gkv, options.gcov_dir = setup_gkv()
 
 our $exit_code = 0
 # Check for requested functionality
 if $reset:
     data_to_stdout = False
     # Differentiate between user space and kernel reset
-    if @directory:
+    if args.directory:
         userspace_reset()
     else:
         kernel_reset()
@@ -322,54 +307,52 @@ elif $capture:
     # Capture source can be user space, kernel or package
     if $from_package:
         package_capture()
-    elif @directory:
+    elif args.directory:
         userspace_capture()
     else:
-        if $initial:
-            if to_package:
-                die("ERROR: --initial cannot be used together "
-                    "with --to-package\n")
+        if args.initial:
+            if args.to_package:
+                die("ERROR: --initial cannot be used together with --to-package\n")
             kernel_capture_initial()
         else:
             kernel_capture()
-elif @add_tracefile:
+elif args.add_tracefile:
     (ln_overall_found, ln_overall_hit,
      fn_overall_found, fn_overall_hit,
-     br_overall_found, br_overall_hit) = add_traces(@add_tracefile)
-elif $remove:
+     br_overall_found, br_overall_hit) = add_traces()
+elif args.remove is not None:
     (ln_overall_found, ln_overall_hit,
      fn_overall_found, fn_overall_hit,
      br_overall_found, br_overall_hit) = remove()
-elif $extract:
+elif args.extract is not None:
     (ln_overall_found, ln_overall_hit,
      fn_overall_found, fn_overall_hit,
      br_overall_found, br_overall_hit) = extract()
 elif $list:
     data_to_stdout = False
     list()
-elsif $diff:
-    if (scalar(@ARGV) != 1):
-        die("ERROR: option --diff requires one additional argument!\n".
-            "Use $tool_name --help to get usage information\n");
-
+elif args.diff:
+    if len(@ARGV) != 1:
+        die("ERROR: option --diff requires one additional argument!\n"
+            f"Use {tool_name} --help to get usage information\n")
     (ln_overall_found, ln_overall_hit,
      fn_overall_found, fn_overall_hit,
      br_overall_found, br_overall_hit) = diff()
-elif @opt_summary:
+elif args.summary:
     data_to_stdout = False
     (ln_overall_found, ln_overall_hit,
      fn_overall_found, fn_overall_hit,
-     br_overall_found, br_overall_hit) = summary(@opt_summary)
+     br_overall_found, br_overall_hit) = summary()
     $exit_code = check_rates(ln_overall_found, ln_overall_hit)
 
 temp_cleanup()
 
-if defined($ln_overall_found):
+if ln_overall_found is not None:
     print_overall_rate(True, ln_overall_found, ln_overall_hit,
                        True, fn_overall_found, fn_overall_hit,
                        True, br_overall_found, br_overall_hit)
 else:
-    if ! $list && ! $capture:
+    if ! $list and ! $capture:
         info("Done.\n")
 
 sys.exit($exit_code)
@@ -442,109 +425,97 @@ def check_options():
     """Check for valid combination of command line options.
     Die on error."""
 
+    global args
+
     # Count occurrence of mutually exclusive options
     options = (
         $reset,
         $capture,
-        @add_tracefile,
-        $extract,
-        $remove,
+        args.add_tracefile,
+        args.extract,
+        args.remove,
         $list,
-        $diff,
-        @opt_summary,
+        args.diff,
+        args.summary,
     )
     count = len([1 for item in options if item])
     
     if count == 0:
         die("Need one of options -z, -c, -a, -e, -r, -l, "
             "--diff or --summary\n"
-            "Use $tool_name --help to get usage information\n")
+            f"Use {tool_name} --help to get usage information\n")
     elif count > 1:
         die("ERROR: only one of -z, -c, -a, -e, -r, -l, "
             "--diff or --summary allowed!\n"
-            "Use $tool_name --help to get usage information\n")
+            f"Use {tool_name} --help to get usage information\n")
 
 #class LCov:
 
-# NOK
+
 def userspace_reset():
-    # Reset coverage data found in DIRECTORY by deleting all contained .da files.
-    #
-    # Die on error.
+    """Reset coverage data found in DIRECTORY by deleting all contained .da files.
 
-    global directory
-    global opt
+    Die on error.
+    """
+    global args
 
-    for current_dir in directory:
-        info("Deleting all .da files in {}{}".format(current_dir,
-             ("" if opt.no_recursion else " and subdirectories"."\n")))
-        file_list = `find "$current_dir" $maxdepth $follow -name \\*\\.da -type f -o -name \\*\\.gcda -type f 2>/dev/null`;
+    follow = "-follow" if args.follow else = ""
+
+    for dir in args.directory:
+        info("Deleting all .da files in {}{}\n".format(dir,
+             ("" if args.no_recursion else " and subdirectories")))
+        file_list = `find "$dir" $maxdepth $follow -name \\*\\.da -type f -o -name \\*\\.gcda -type f 2>/dev/null` # NOK
         for filename in file_list.striplines():
-            filename = filename.strip()
-            unlink(filename) 
-                or die(f"ERROR: cannot remove file {filename}!\n")
+            filename = Path(filename.strip())
+            try:
+                filename.unlink()
+            except:
+                die(f"ERROR: cannot remove file {filename}!\n")
 
-# OK
+
 def userspace_capture():
-    # Capture coverage data found in DIRECTORY and write it to a package
-    # (if TO_PACKAGE specified) or to OUTPUT_FILENAME or sys.stdout.
-    #
-    # Die on error.
+    """Capture coverage data found in DIRECTORY and write it to a package
+    (if TO_PACKAGE specified) or to OUTPUT_FILENAME or sys.stdout.
+    
+    Die on error.
+    """
+    global args
 
-    global to_package
-    global directory
-    global base_directory
-
-    if not to_package:
-        lcov_geninfo(*directory)
+    if not args.to_package:
+        lcov_geninfo(*args.directory)
         return
 
-    if len(directory) != 1:
+    if len(args.directory) != 1:
         die("ERROR: -d may be specified only once with --to-package\n")
 
-    dir   = Path(directory[0])
-    build = base_directory if base_directory is not None else str(dir)
+    dir   = Path(args.directory[0])
+    build = args.base_directory if args.base_directory is not None else str(dir)
 
-    create_package(to_package, dir, build)
+    create_package(args.to_package, dir, build)
 
-# OK
+
 def kernel_reset():
-    # Reset kernel coverage.
-    #
-    # Die on error.
-    global gcov_dir
+    """Reset kernel coverage.
+
+    Die on error.
+    """
+    global options
 
     info("Resetting kernel execution counters\n")
-    if (gcov_dir/"vmlinux").exists():
-        reset_file = gcov_dir/"vmlinux"
-    elif (gcov_dir/"reset").exists():
-        reset_file = gcov_dir/"reset"
+    if (options.gcov_dir/"vmlinux").exists():
+        reset_file = options.gcov_dir/"vmlinux"
+    elif (options.gcov_dir/"reset").exists():
+        reset_file = options.gcov_dir/"reset"
     else:
-        die(f"ERROR: no reset control found in {gcov_dir}\n")
+        die(f"ERROR: no reset control found in {options.gcov_dir}\n")
     try:
         reset_file.write("0")
     except:
         die(f"ERROR: cannot write to {reset_file}!\n")
 
-# OK
-def lcov_copy_single(path_from: Path, path_to: Path):
-    # Copy single regular file FROM to TO without checking its size.
-    # This is required to work with special files generated by the
-    # kernel seq_file-interface.
-    try:
-        content = path_from.read_text()
-    except Exception as exc:
-        die(f"ERROR: cannot read {path_from}: {exc}!\n")
-    try:
-        path_to.write_text(content or "")
-    except Exception as exc:
-        die(f"ERROR: cannot write {path_to}: {exc}!\n")
-
 # NOK
-def lcov_find(dir: Path, func: Calable, $data ;@):
+def lcov_find(dir: Path, func: Callable, $data, pattern: Optional[List] = None):
     # lcov_find(dir, function, data[, extension, ...)])
-
-    my (, @pattern) = @_;
 
     # Search DIR for files and directories whose name matches PATTERN and run
     # FUNCTION for each match. If not pattern is specified, match all names.
@@ -557,30 +528,30 @@ def lcov_find(dir: Path, func: Calable, $data ;@):
     #   relative_name: the name relative to the base directory of this entry
     #   data: the DATA variable passed to lcov_find
 
-    $result = None
+    result = None
 
     def find_cb():
-        nolocal dir, func, $data, @pattern, $result
-        nolocal $result
+        nolocal dir, func, $data, pattern
+        nolocal result
 
-        my $filename = $File::Find::name;
+        filename = $File::Find::name;
 
-        if $result is not None:
+        if result is not None:
             return
 
-        $filename = abs2rel($filename, str(dir))
-        for $patt in @pattern:
-            if $filename =~ /$patt/:
-                $result = func(dir, $filename, $data)
+        filename = abs2rel(filename, str(dir))
+        for $patt in pattern:
+            if filename =~ /$patt/:
+                result = func(dir, filename, $data)
                 return
 
-    if len(@pattern) == 0: @pattern = ".*"
+    if len(pattern) == 0: pattern = [".*"]
 
     find({ wanted => find_cb, no_chdir => 1 }, str(dir))
 
-    return $result;
+    return result
 
-# OK
+
 def lcov_copy(path_from: Path, path_to: Path, subdirs: List[object]):
     # Copy all specified SUBDIRS and files from directory FROM to directory TO.
     # For regular files, copy file contents without checking its size.
@@ -592,104 +563,107 @@ def lcov_copy(path_from: Path, path_to: Path, subdirs: List[object]):
 def lcov_copy_fn(path_from: Path, $rel, path_to: Path):
     """Copy directories, files and links from/rel to to/rel."""
 
-    $abs_from = canonpath(path_from/$rel))
-    $abs_to   = canonpath(path_to/  $rel))
+    abs_from = Path(canonpath(path_from/$rel))
+    abs_to   = Path(canonpath(path_to/$rel))
 
     if (-d):
         if (! -d $abs_to):
             try:
                 mkpath($abs_to)
             except:
-                die("ERROR: cannot create directory $abs_to\n")
-            chmod(0700, $abs_to)
+                die(f"ERROR: cannot create directory {abs_to}\n")
+            abs_to.chmod(0o0700)
     elif (-l):
         # Copy symbolic link
-        $link = readlink($abs_from)
-        if ! defined($link):
-            die("ERROR: cannot read link $abs_from: $!\n")
         try:
-            symlink($link, $abs_to) or
-        except:
-            die("ERROR: cannot create link $abs_to: $!\n")
+            link = readlink($abs_from)
+        except Exception as exc:
+            die(f"ERROR: cannot read link {abs_from}: {exc}!\n")
+        try:
+            symlink($link, $abs_to)
+        except Exception as exc:
+            die(f"ERROR: cannot create link {abs_to}: {exc}!\n")
     else:
-        lcov_copy_single(Path($abs_from), Path($abs_to))
-        chmod(0600, $abs_to)
+        lcov_copy_single(abs_from, abs_to)
+        abs_to.chmod(0o0600)
 
     return None
 
+
+def lcov_copy_single(path_from: Path, path_to: Path):
+    """Copy single regular file FROM to TO without checking its size.
+    This is required to work with special files generated by the
+    kernel seq_file-interface.
+    """
+    try:
+        content = path_from.read_text()
+    except Exception as exc:
+        die(f"ERROR: cannot read {path_from}: {exc}!\n")
+    try:
+        path_to.write_text(content or "")
+    except Exception as exc:
+        die(f"ERROR: cannot write {path_to}: {exc}!\n")
+
 # NOK
-def lcov_geninfo(*dirs: List):
+def lcov_geninfo(*dirs):
     # Call geninfo for the specified directories and with the parameters
     # specified at the command line.
 
+    global args
     global tool_dir
     global opt
-    global output_filename
     $test_name
-    $follow
-    opt.quiet
-    $checksum
-    base_directory
-    $no_compat_libtool
-    $compat_libtool
-    $gcov_tool
-    $initial
-    $no_markers
-    @include_patterns
-    @exclude_patterns
+
+    dir_list = [str(dir) for dir in dirs]
 
     # Capture data
-    info("Capturing coverage data from {}\n".format(
-        " ".join(str(dir) for dir in dirs)))
+    info("Capturing coverage data from {}\n".format(" ".join(dir_list)))
 
-    param = [f"{tool_dir}/geninfo"] + [str(dir) for dir in dirs]
-    if output_filename:
-        param += ["--output-filename", str(output_filename)]
+    param = [f"{tool_dir}/geninfo"] + dir_list
+    if args.output_filename:
+        param += ["--output-filename", str(args.output_filename)]
     if $test_name:
         param += ["--test-name", $test_name]
-    if $follow:
+    if args.follow:
         param += ["--follow"]
-    if opt.quiet:
+    if args.quiet:
         param += ["--quiet"]
-    if $checksum is not None:
-        if $checksum:
-            param += ["--checksum"]
-        else
-            param += ["--no-checksum"]
-    if base_directory:
-        param += ["--base-directory", base_directory]
-    if $no_compat_libtool:
+    if args.checksum is not None:
+        param += ["--checksum"] if args.checksum else ["--no-checksum"]
+    if args.base_directory:
+        param += ["--base-directory", args.base_directory]
+    if args.no_compat_libtool:
         param += ["--no-compat-libtool"]
-    elif $compat_libtool:
+    elif args.compat_libtool:
         param += ["--compat-libtool"]
-    if $gcov_tool:
-        param += ["--gcov-tool", $gcov_tool]
-    for err in opt.ignore_errors:
+    if args.gcov_tool is not None:
+        param += ["--gcov-tool", args.gcov_tool]
+    for err in args.ignore_errors:
         param += ["--ignore-errors", err]
-    if opt.no_recursion:
+    if args.no_recursion:
         param += ["--no-recursion"]
-    if $initial:
+    if args.initial:
         param += ["--initial"]
-    if $no_markers:
+    if args.no_markers:
         param += ["--no-markers"]
-    if opt.derive_func_data:
+    if args.derive_func_data:
         param += ["--derive-func-data"]
-    if opt.debug:
+    if args.debug:
         param += ["--debug"]
-    if opt.external is not None and opt.external:
+    if args.external is not None and args.external:
         param += ["--external"]
-    if opt.external is not None and not opt.external:
+    if args.external is not None and not args.external:
         param += ["--no-external"]
-    if opt.compat is not None:
-        param += ["--compat", opt.compat]
-    if opt.rc:
-        for key, val in opt.rc.items():
+    if args.compat is not None:
+        param += ["--compat", args.compat]
+    if args.rc:
+        for key, val in args.rc.items():
             param += ["--rc", f"{key}={val}"]
-    if opt.config_file is not None:
-        param += ["--config-file", opt.config_file]
-    for patt in @include_patterns:
+    if args.config_file is not None:
+        param += ["--config-file", args.config_file]
+    for patt in args.include_patterns:
         param += ["--include", patt]
-    for patt in @exclude_patterns:
+    for patt in args.exclude_patterns:
         param += ["--exclude", patt]
 
     os.system(@param)
@@ -697,30 +671,31 @@ def lcov_geninfo(*dirs: List):
 
 # NOK
 def get_package(package_file: Path) -> Tuple[Path, object, object]:
-    # Unpack unprocessed coverage data files from package_file to a temporary
-    # directory and return directory name, build directory and gcov kernel version
-    # as found in package.
-
+    """Unpack unprocessed coverage data files from package_file to a temporary
+    directory and return directory name, build directory and gcov kernel version
+    as found in package.
+    """
     global pkg_gkv_file, pkg_build_file
 
     dir = create_temp_dir()
     cwd = Path.cwd()
     try:
         my $gkv;
-        my $count;
-        local *HANDLE;
-
         info(f"Reading package {package_file}:\n")
+
         $package_file = abs_path(str(package_file))
+
         os.chdir(dir)
-        HANDLE = open("-|", "tar xvfz '$package_file' 2>/dev/null")
-            or die(f"ERROR: could not process package {package_file}\n")
-        $count = 0;
-        with HANDLE:
-            while (<HANDLE>):
-                if (/\.da$/ || /\.gcda$/):
-                    $count += 1
-        if $count == 0:
+        try:
+            fhandle = open("-|", "tar xvfz '$package_file' 2>/dev/null")
+        except:
+            die(f"ERROR: could not process package {package_file}\n")
+        count = 0;
+        with fhandle:
+            while (<fhandle>):
+                if (/\.da$/ or /\.gcda$/):
+                    count += 1
+        if count == 0:
             die(f"ERROR: no data file found in package {package_file}\n")
         info(f"  data directory .......: {dir}\n")
         fpath = dir/pkg_build_file
@@ -737,31 +712,33 @@ def get_package(package_file: Path) -> Tuple[Path, object, object]:
             info("  gcov kernel version ..: %s\n", GKV_NAME[$gkv])
         else:
             info("  content type .........: application data\n")
-        info("  data files ...........: $count\n")
+        info(f"  data files ...........: {count}\n")
     finally:
-        os.chdir(cwd);
+        os.chdir(cwd)
 
     return (dir, build, $gkv)
 
-# NOK
+
 def count_package_data(filename: Path) -> Optional[int]:
-    # Count the number of coverage data files in the specified package file.
-    HANDLE = open(f"tar tfz '{filename}'", "-|")
-        or return None
+    """Count the number of coverage data files in the specified package file."""
+    try:
+        fhandle = open(f"tar tfz '{filename}'", "-|") # NOK
+    except:
+        return None
     count = 0
-    with HANDLE:
-        while (<HANDLE>):
-            if /\.da$/ or /\.gcda$/:
+    with fhandle:
+        for line in fhandle:
+            line = line.rstrip()
+            if any(line.endswith(ext) for ext in (".da", ".gcda")):
                 count += 1
     return count
 
 # NOK
-def create_package(package_file: Path, dir: Path, $build: Optional; $)
+def create_package(package_file: Path, dir: Path, $build: Optional, gkv: Optional[str] = None)
     # create_package(package_file, source_directory, build_directory[, kernel_gcov_version])
-
+    global args
     global pkg_gkv_file, pkg_build_file
 
-    my (, $gkv) = @_;
     # Store unprocessed coverage data files from source_directory to package_file.
 
     cwd = Path.cwd()
@@ -779,17 +756,17 @@ def create_package(package_file: Path, dir: Path, $build: Optional; $)
             info(f"  build directory ......: {build}\n")
             fpath = dir/pkg_build_file
             try:
-                write_file(fpath, build)
+                write_file(fpath, str(build))
             except:
                 die(f"ERROR: could not write to {fpath}\n")
 
         # Handle gcov kernel version data
-        if defined($gkv):
+        if gkv is not None:
             info("  content type .........: kernel data\n");
-            info("  gcov kernel version ..: %s\n", GKV_NAME[$gkv])
+            info("  gcov kernel version ..: %s\n", GKV_NAME[gkv])
             fpath = dir/pkg_gkv_file
             try:
-                write_file(fpath, $gkv)
+                write_file(fpath, gkv)
             except:
                 die(f"ERROR: could not write to {fpath}\n")
         else:
@@ -808,7 +785,7 @@ def create_package(package_file: Path, dir: Path, $build: Optional; $)
     (dir/pkg_gkv_file).unlink()
 
     # Show number of data files
-    if not opt.quiet:
+    if not args.quiet:
         count = count_package_data(package_file)
         if count is not None:
             info(f"  data files ...........: {count}\n")
@@ -829,8 +806,9 @@ def get_base(dir: Path) -> Tuple[Optional[Path], Optional[Path]]:
     sys_base = Path(abs2rel(str(marker_file.parent.parent.parent), str(dir)))
 
     # build base is parent of parent of markerfile link target.
-    link = readlink(str(marker_file))
-    if link is None:
+    try:
+        link = readlink(str(marker_file))
+    except Exception as exc:
         die(f"ERROR: could not read {markerfile}\n")
     build = Path(link).parent.parent.parent
 
@@ -838,40 +816,41 @@ def get_base(dir: Path) -> Tuple[Optional[Path], Optional[Path]]:
 
 # NOK
 def find_link_fn(path_from: Path, rel, filename):
-    abs_file = path_from/rel/filename)
+    abs_file = path_from/rel/filename
     return abs_file if (-l str(abs_file) else None
 
 # NOK
-def apply_base_dir($data: Path, $base: Optional[Path], $build, @dirs: List) -> List:
+def apply_base_dir($data: Path, $base: Optional[Path], $build, dirs: List) -> List:
     # apply_base_dir(data_dir, base_dir, build_dir, @directories)
     # Make entries in @directories relative to data_dir.
+    global args
 
     $data = str($data)
     if $base is not None: $base = str($base)
 
-    my @result;
+    result: List = []
 
-    for $dir in @dirs:
+    for $dir in dirs:
 
         # Is directory path relative to data directory?
         if (-d catdir($data, $dir)):
-            @result.push($dir)
+            result.append($dir)
             continue
 
         # Relative to the auto-detected base-directory?
         if $base is not None:
             if (-d catdir($data, $base, $dir)):
-                @result.push(catdir($base, $dir))
+                result.append(catdir($base, $dir))
                 continue
 
         # Relative to the specified base-directory?
-        if base_directory is not None:
-            if file_name_is_absolute(base_directory):
-                $base = abs2rel(base_directory, rootdir())
+        if args.base_directory is not None:
+            if file_name_is_absolute(args.base_directory):
+                $base = abs2rel(args.base_directory, rootdir())
             else:
-                $base = base_directory
+                $base = args.base_directory
             if (-d catdir($data, $base, $dir)):
-                @result.push(catdir($base, $dir))
+                result.append(catdir($base, $dir))
                 continue
 
         # Relative to the build directory?
@@ -881,19 +860,20 @@ def apply_base_dir($data: Path, $base: Optional[Path], $build, @dirs: List) -> L
             else:
                 $base = $build
             if (-d catdir($data, $base, $dir)):
-                @result.push(catdir($base, $dir))
+                result.append(catdir($base, $dir))
                 continue
 
-        die("ERROR: subdirectory $dir not found\n"
+        die(f"ERROR: subdirectory {dir} not found\n"
             "Please use -b to specify the correct directory\n")
 
-    return @result
+    return result
 
-# OK
+
 def copy_gcov_dir(dir: Path, subdirs: List[object] = []) -> Path:
-    # Create a temporary directory and copy all or, if specified,
-    # only some subdirectories from dir to that directory.
-    # Return the name of the temporary directory.
+    """Create a temporary directory and copy all or, if specified,
+    only some subdirectories from dir to that directory.
+    Return the name of the temporary directory.
+    """
     tempdir = create_temp_dir()
 
     info(f"Copying data to temporary directory {tempdir}\n")
@@ -901,19 +881,20 @@ def copy_gcov_dir(dir: Path, subdirs: List[object] = []) -> Path:
 
     return tempdir
 
-# NOK
+
 def kernel_capture_initial():
-    # Capture initial kernel coverage data, i.e. create a coverage data file from
-    # static graph files which contains zero coverage data for all instrumented
-    # lines.
+    """Capture initial kernel coverage data, i.e. create a coverage
+    data file from static graph files which contains zero coverage data
+    for all instrumented lines.
+    """
+    global options
+    global args
 
-    global base_directory, gcov_dir
-
-    if base_directory is not None:
-        build  = base_directory
+    if args.base_directory is not None:
+        build  = args.base_directory
         source = "specified"
     else:
-        _, build = get_base(gcov_dir)
+        _, build = get_base(options.gcov_dir)
         if build is None:
             die("ERROR: could not auto-detect build directory.\n"
                 "Please use -b to specify the build directory\n")
@@ -922,38 +903,24 @@ def kernel_capture_initial():
 
     info(f"Using {build} as kernel build directory ({source})\n")
     # Build directory needs to be passed to geninfo
-    base_directory = build
+    args.base_directory = build
     params = []
-    if kernel_directory:
-        for $dir in kernel_directory:
-            params.push("$build/$dir")
+    if args.kernel_directory:
+        for dir in args.kernel_directory:
+            params.append(f"{build}/{dir}")
     else:
-        params.push(build)
+        params.append(build)
 
     lcov_geninfo(*params)
 
-# NOK
-def kernel_capture_from_dir(dir: Path, $gcov_kernel_version, $build):
-    # Perform the actual kernel coverage capturing from the specified directory
-    # assuming that the data was copied from the specified gcov kernel version.
-    global to_package
-    global base_directory
 
-    # Create package or coverage file
-    if to_package:
-        create_package(to_package, dir, $build, $gcov_kernel_version)
-    else:
-        # Build directory needs to be passed to geninfo
-        base_directory = $build
-        lcov_geninfo(dir)
-
-# OK
 def adjust_kernel_dir(dir: Path, build: Optional[Path]) -> Path:
-    # Adjust directories specified with -k so that they point to the
-    # directory relative to DIR.
-    # Return the build directory if specified or the auto-detected
-    # build-directory.
-    global kernel_directory
+    """Adjust directories specified with -k so that they point to the
+    directory relative to DIR.
+    Return the build directory if specified or the auto-detected
+    build-directory.
+    """
+    global args
 
     sys_base, build_auto = get_base(dir)
     if build is None:
@@ -963,23 +930,38 @@ def adjust_kernel_dir(dir: Path, build: Optional[Path]) -> Path:
             "Please use -b to specify the build directory\n")
 
     # Make kernel_directory relative to sysfs base
-    if kernel_directory:
-        kernel_directory = apply_base_dir(dir, sys_base, str(build),
-                                          kernel_directory)
+    if args.kernel_directory:
+        args.kernel_directory = apply_base_dir(dir, sys_base, str(build),
+                                               args.kernel_directory)
     return build
 
 # NOK
 def kernel_capture():
 
-    global base_directory, kernel_directory
-    global gcov_gkv, gcov_dir
+    global options
+    global args
+    global gcov_gkv
 
-    build = base_directory
+    build = args.base_directory
     if gcov_gkv == GKV_SYS:
-        build = str(adjust_kernel_dir(gcov_dir, Path(build) if build is not None else None))
+        build = str(adjust_kernel_dir(options.gcov_dir, Path(build) if build is not None else None))
 
-    data_dir = copy_gcov_dir(gcov_dir, kernel_directory)
+    data_dir = copy_gcov_dir(options.gcov_dir, args.kernel_directory)
     kernel_capture_from_dir(data_dir, gcov_gkv, build)
+
+# NOK
+def kernel_capture_from_dir(dir: Path, gcov_kernel_version: str, $build):
+    """Perform the actual kernel coverage capturing from the specified directory
+    assuming that the data was copied from the specified gcov kernel version."""
+    global args
+
+    # Create package or coverage file
+    if args.to_package:
+        create_package(args.to_package, dir, $build, gcov_kernel_version)
+    else:
+        # Build directory needs to be passed to geninfo
+        args.base_directory = $build
+        lcov_geninfo(dir)
 
 # NOK
 def link_data(targetdatadir: Path, targetgraphdir, *, create: bool):
@@ -990,7 +972,7 @@ def link_data(targetdatadir: Path, targetgraphdir, *, create: bool):
     targetgraphdir = abs_path(targetgraphdir)
 
     op_data_cb = link_data_cb if create else unlink_data_cb, 
-    lcov_find(Path(targetdatadir), op_data_cb, Path(targetgraphdir), "\.gcda$", "\.da$")
+    lcov_find(Path(targetdatadir), op_data_cb, Path(targetgraphdir), ["\.gcda$", "\.da$"])
 
 # NOK
 def link_data_cb($datadir: Path, $rel, $graphdir: Path):
@@ -1000,11 +982,11 @@ def link_data_cb($datadir: Path, $rel, $graphdir: Path):
     $abs_to   = catfile(str($graphdir), $rel)
 
     if (-e $abs_to):
-        die("ERROR: could not create symlink at $abs_to: "
+        die(f"ERROR: could not create symlink at {abs_to}: "
             "File already exists!\n")
     if (-l $abs_to):
         # Broken link - possibly from an interrupted earlier run
-        unlink($abs_to);
+        Path($abs_to).unlink()
 
     # Check for graph file
     $base = $abs_to;
@@ -1022,19 +1004,22 @@ def link_data_cb($datadir: Path, $rel, $graphdir: Path):
 def unlink_data_cb($datadir: Path, $rel, $graphdir: Path):
     """Remove symbolic link from GRAPHDIR/REL to DATADIR/REL."""
 
-    abs_from = catfile(str($datadir),  $rel)
-    abs_to   = catfile(str($graphdir), $rel)
+    abs_from = Path(catfile(str($datadir),  $rel))
+    abs_to   = Path(catfile(str($graphdir), $rel))
 
     if (! -l abs_to):
         return
-    target = readlink(abs_to)
-    if target is None or target != abs_from:
+    try:
+        target = readlink(abs_to)
+    except:
+        return
+    if target != abs_from:
         return
 
     try:
-        unlink(abs_to)
-    except:
-        or warn(f"WARNING: could not remove symlink {abs_to}: $!\n")
+        abs_to.unlink()
+    except Exception as exc:
+        warn(f"WARNING: could not remove symlink {abs_to}: {exc}!\n")
 
 # NOK
 def find_graph(dir: Path) -> bool:
@@ -1049,7 +1034,7 @@ def find_graph(dir: Path) -> bool:
         # Count number of files found.
         ($$count_ref)++;
 
-    lcov_find(dir, find_graph_cb, \$count, "\.gcno$", "\.bb$", "\.bbg$")
+    lcov_find(dir, find_graph_cb, \$count, ["\.gcno$", "\.bb$", "\.bbg$"])
 
     return count > 0
 
@@ -1057,47 +1042,47 @@ def find_graph(dir: Path) -> bool:
 def package_capture():
     # Capture coverage data from a package of unprocessed coverage data files
     # as generated by lcov --to-package.
-
-    global base_directory
+    global args
     global $from_package
 
     dir: Path, $build, $gkv = get_package(Path($from_package))
 
     # Check for build directory
-    if base_directory is not None:
-        if defined($build):
+    if args.base_directory is not None:
+        if build is not None:
             info("Using build directory specified by -b.\n")
-        $build = base_directory
+        $build = args.base_directory
 
     # Do the actual capture
-    if defined($gkv):
+    if $gkv is not None:
         if $gkv == GKV_SYS:
             $build = str(adjust_kernel_dir(dir, Path(build) if build is not None else None))
-        if kernel_directory:
-            dir = copy_gcov_dir(dir, kernel_directory)
+        if args.kernel_directory:
+            dir = copy_gcov_dir(dir, args.kernel_directory)
         kernel_capture_from_dir(str($dir), $gkv, $build);
     else:
         # Build directory needs to be passed to geninfo
-        base_directory = $build
+        args.base_directory = $build
         if find_graph(dir):
             # Package contains graph files - collect from there
             lcov_geninfo(dir)
         else:
             # No graph files found, link data files next to
             # graph files
-            link_data(dir, base_directory, create=True)
-            lcov_geninfo(base_directory)
-            link_data(dir, base_directory, create=False)
+            link_data(dir, args.base_directory, create=True)
+            lcov_geninfo(args.base_directory)
+            link_data(dir, args.base_directory, create=False)
 
 # NOK
 def info(@)
     # info(printf_parameter)
     #
-    # Use printf to write PRINTF_PARAMETER to stdout only when the opt.quiet flag
-    # is not set.
+    # Use printf to write PRINTF_PARAMETER to stdout only when the args.quiet
+    # flag is not set.
+    global args
     global data_to_stdout
 
-    if opt.quiet: return
+    if args.quiet: return
     # Print info string
     if not data_to_stdout:
         printf(*args)
@@ -1105,42 +1090,40 @@ def info(@)
         # Don't interfere with the .info output to sys.stdout
         printf(*args, file=sys.stderr)
 
-# NOK
+
 def create_temp_dir() -> Path:
-    # Create a temporary directory and return its path.
-    #
-    # Die on error.
-    global tmp_dir, temp_dirs
+    """Create a temporary directory and return its path.
+
+    Die on error.
+    """
+    global options
+    global temp_dirs
 
     try:
-        if tmp_dir is not None:
-            dir = Path(tempdir(DIR => tmp_dir, CLEANUP => 1))
+        if options.tmp_dir is not None:
+            dir = Path(tempdir(DIR => str(options.tmp_dir), CLEANUP => 1)) # NOK
         else:
-            dir = Path(tempdir(CLEANUP => 1))
+            dir = Path(tempdir(CLEANUP => 1)) # NOK
     except:
         die("ERROR: cannot create temporary directory\n")
 
     temp_dirs.append(dir)
     return dir
 
-# OK
-def compress_brcount(brcount: Dict[int, str]) -> Tuple[Dict, int, int]:
-    db = brcount_to_db(brcount);
+
+def compress_brcount(brcount: Dict[int, str]) -> Tuple[Dict[int, str], int, int]: 
+    """ """
+    db = brcount_to_db(brcount)
     return db_to_brcount(db, brcount)
 
-# OK
-def get_branch_found_and_hit(brcount: Dict[int, str]) -> Tuple[int, int]:
-    db = brcount_to_db(brcount);
-    return brcount_db_get_found_and_hit(db)
-
 # NOK
-def read_info_file($tracefile):
+def read_info_file($tracefile) -> Dict[str, Dict[str, object]]:
     # read_info_file(info_filename)
     #
     # Read in the contents of the .info file specified by INFO_FILENAME. Data will
     # be returned as a reference to a hash containing the following mappings:
     #
-    # %result: for each filename found in file -> \%data
+    # result: for each filename found in file -> \%data
     #
     # %data: "test"    -> \%testdata
     #        "sum"     -> \%sumcount
@@ -1180,37 +1163,35 @@ def read_info_file($tracefile):
     #
     # Die on error.
 
+    global options
+
     my $data;            # Data handle for current entry
-    my $testdata;            #       "             "
-    my $testcount;            #       "             "
-    my $sumcount;            #       "             "
-    my $funcdata;            #       "             "
-    my $checkdata;            #       "             "
+    my $testdata;        #       "             "
+    my $testcount;       #       "             "
+    my $sumcount;        #       "             "
+    my $funcdata;        #       "             "
+    my $checkdata;       #       "             "
     my $testfncdata;
     my $testfnccount;
     my $sumfnccount;
-    my $testbrdata;
     my $testbrcount;
     my $sumbrcount;
     my $line;            # Current line read from .info file
-    my $testname;            # Current test name
     my $filename;            # Current filename
-    my $hitcount;            # Count for lines hit
     my $count;            # Execution count of current line
-    my $negative;            # If set, warn about negative counts
-    my $changed_testname;        # If set, warn about changed testname
-    my $line_checksum;        # Checksum of current line
 
-    %result = {}  # Resulting hash: file -> data
+    negative         = False  # If set, warn about negative counts
+    changed_testname = False  # If set, warn about changed testname
+
+    result: Dict[str, Dict[str, object]] = {}  # Resulting hash: file -> data
 
     info("Reading tracefile $tracefile\n")
 
     # Check if file exists and is readable
-    stat($_[0]);
-    if ! (-r _):
+    if not os.access($_[0], os.R_OK):
         die("ERROR: cannot read file $_[0]!\n")
-
     # Check if this is really a plain file
+    fstatus = Path($_[0]).stat()
     if ! (-f _):
         die("ERROR: not a plain file: $_[0]!\n")
 
@@ -1226,239 +1207,191 @@ def read_info_file($tracefile):
                 "compressed file $_[0]!\n")
 
         # Open compressed file
-        INFO_HANDLE = open("-|", "gunzip -c '$_[0]'")
-            or die("ERROR: cannot start gunzip to decompress ".
-                   "file $_[0]!\n")
+        try:
+            INFO_HANDLE = open("-|", "gunzip -c '$_[0]'")
+        except:
+            or die("ERROR: cannot start gunzip to decompress file $_[0]!\n")
     else:
         # Open decompressed file
-        INFO_HANDLE = open("<", $_[0])
+        try:
+            INFO_HANDLE = open("rt", $_[0])
+        except:
             or die("ERROR: cannot read file $_[0]!\n")
 
-    $testname = "";
+    testname = ""  # Current test name
     with INFO_HANDLE:
-        while (<INFO_HANDLE>)
-        {
-            $_ = $_.rstrip("\n")
-            $line = $_;
+        for line in INFO_HANDLE:
+            line = line.rstrip("\n")
 
-            # Switch statement
-            foreach ($line)
-            {
-                /^TN:([^,]*)(,diff)?/ && do
-                {
-                    # Test name information found
-                    $testname = defined($1) ? $1 : "";
-                    if ($testname =~ s/\W/_/g):
-                        $changed_testname = 1;
-                    $testname .= $2 if (defined($2));
-                    last;
-                };
+            match = re.match(r"^TN:([^,]*)(,diff)?", line)
+            if match:
+                # Test name information found
+                testname = defined($1) ? $1 : "";
+                if (testname =~ s/\W/_/g):
+                    changed_testname = True
+                testname .= $2 if (defined($2));
+                continue
 
-                /^[SK]F:(.*)/ && do
-                {
-                    # Filename information found
-                    # Retrieve data for new entry
-                    $filename = $1;
+            match = re.match(r"^[SK]F:(.*)", line)
+            if match:
+                # Filename information found
+                # Retrieve data for new entry
+                $filename = $1;
 
-                    $data = $result{$filename};
-                    ($testdata, $sumcount, $funcdata, $checkdata,
-                     $testfncdata, $sumfnccount,
-                     $testbrdata,  $sumbrcount) = get_info_entry($data)
+                $data: Dict[str, object] = $result{$filename}
+                ($testdata, $sumcount, $funcdata, $checkdata,
+                 $testfncdata, $sumfnccount,
+                 $testbrdata,  $sumbrcount,
+                 _, _, _, _, _, _) = get_info_entry(data)
 
-                    if (defined($testname)):
-                        $testcount = $testdata->{$testname};
-                        $testfnccount = $testfncdata->{$testname};
-                        $testbrcount = $testbrdata->{$testname};
-                    else:
-                        $testcount    = {};
-                        $testfnccount = {};
-                        $testbrcount  = {};
-                    last;
-                };
+                if defined($testname):
+                    $testcount    = $testdata[testname]
+                    $testfnccount = $testfncdata[testname]
+                    $testbrcount  = $testbrdata[testname]
+                else:
+                    $testcount    = {}
+                    $testfnccount = {}
+                    $testbrcount  = {}
+                continue
 
-                /^DA:(\d+),(-?\d+)(,[^,\s]+)?/ && do
-                {
-                    # Fix negative counts
-                    $count = $2 < 0 ? 0 : $2;
-                    if ($2 < 0):
-                        $negative = 1;
-                    # Execution count found, add to structure
-                    # Add summary counts
-                    $sumcount->{$1} += $count;
+            match = re.match(r"^DA:(\d+),(-?\d+)(,[^,\s]+)?", line)
+            if match:
+                # Fix negative counts
+                $count = $2 < 0 ? 0 : $2;
+                if $2 < 0:
+                    negative = True
+                # Execution count found, add to structure
+                # Add summary counts
+                $sumcount->{$1} += $count
 
-                    # Add test-specific counts
-                    if (defined($testname)):
-                        $testcount->{$1} += $count;
+                # Add test-specific counts
+                if defined($testname):
+                    $testcount->{$1} += $count
 
-                    # Store line checksum if available
-                    if (defined($3))
-                    {
-                        $line_checksum = substr($3, 1);
+                # Store line checksum if available
+                if defined($3):
+                    line_checksum = $3[1:]
+                    # Does it match a previous definition
+                    if $1 in $checkdata and $checkdata->{$1} != line_checksum:
+                        die(f"ERROR: checksum mismatch at {filename}:$1\n")
+                    $checkdata->{$1} = line_checksum
+                continue
 
-                        # Does it match a previous definition
-                        if (defined($checkdata->{$1}) &&
-                            ($checkdata->{$1} ne
-                             $line_checksum))
-                        {
-                            die("ERROR: checksum mismatch at $filename:$1\n")
-                        }
-
-                        $checkdata->{$1} = $line_checksum;
-                    }
-                    last;
-                };
-
-                /^FN:(\d+),([^,]+)/ && do
-                {
-                    last if (!$fn_coverage);
-
+            match = re.match(r"^FN:(\d+),([^,]+)", line)
+            if match:
+                if options.fn_coverage: 
                     # Function data found, add to structure
                     $funcdata->{$2} = $1;
 
                     # Also initialize function call data
-                    if (!defined($sumfnccount->{$2})) {
+                    if (!defined($sumfnccount->{$2}))
                         $sumfnccount->{$2} = 0;
-                    }
-                    if (defined($testname))
-                    {
-                        if (!defined($testfnccount->{$2})) {
+
+                    if defined($testname):
+                        if (!defined($testfnccount->{$2}))
                             $testfnccount->{$2} = 0;
-                        }
-                    }
-                    last;
-                };
+                continue
 
-                /^FNDA:(\d+),([^,]+)/ && do
-                {
-                    last if (!$fn_coverage);
-
+            match = re.match(r"^FNDA:(\d+),([^,]+)", line)
+            if match:
+                 if options.fn_coverage:
                     # Function call count found, add to structure
                     # Add summary counts
                     $sumfnccount->{$2} += $1;
 
                     # Add test-specific counts
-                    if (defined($testname))
-                    {
+                    if defined($testname):
                         $testfnccount->{$2} += $1;
-                    }
-                    last;
-                };
+                continue
 
-                /^BRDA:(\d+),(\d+),(\d+),(\d+|-)/ && do {
-                    # Branch coverage data found
-                    my ($line, $block, $branch, $taken) =
-                       ($1, $2, $3, $4);
-
-                    last if (!$br_coverage);
-                    $sumbrcount->{$line} .=
-                        "$block,$branch,$taken:";
-
+            match = re.match(r"^BRDA:(\d+),(\d+),(\d+),(\d+|-)", line)
+            if match:
+                # Branch coverage data found
+                if options.br_coverage:
+                    lino, block, branch, taken = ($1, $2, $3, $4)
+                    brcount = f"{block},{branch},{taken}:"
+                    sumbrcount[lino] += brcount
                     # Add test-specific counts
-                    if (defined($testname)) {
-                        $testbrcount->{$line} .=
-                            "$block,$branch,$taken:";
-                    }
-                    last;
-                };
+                    if defined($testname):
+                        testbrcount[lino] += brcount
+                continue
 
-                /^end_of_record/ && do
-                {
-                    # Found end of section marker
-                    if ($filename)
-                    {
-                        # Store current section data
-                        if (defined($testname))
-                        {
-                            $testdata->{$testname} =
-                                $testcount;
-                            $testfncdata->{$testname} =
-                                $testfnccount;
-                            $testbrdata->{$testname} =
-                                $testbrcount;
-                        }    
+            match = re.match(r"^end_of_record", line)
+            if match:
+                # Found end of section marker
+                if $filename:
+                    # Store current section data
+                    if defined($testname):
+                        $testdata[testname]    = $testcount
+                        $testfncdata[testname] = $testfnccount
+                        $testbrdata[testname]  = $testbrcount
 
-                        set_info_entry($data, $testdata,
-                                   $sumcount, $funcdata,
-                                   $checkdata, $testfncdata,
-                                   $sumfnccount,
-                                   $testbrdata,
-                                   $sumbrcount);
-                        $result{$filename} = $data;
-                        last;
-                    }
-                };
-
-                # default
-                last;
-            }
-        }
+                    set_info_entry($data,
+                                   $testdata, $sumcount, $funcdata, $checkdata,
+                                   $testfncdata, $sumfnccount,
+                                   $testbrdata,  $sumbrcount)
+                    $result{$filename} = $data
+                    continue
 
     # Calculate hit and found values for lines and functions of each file
-    for $filename in keys(%result):
-    {
-        $data = $result{$filename};
+    for filename in list(result.keys()):
+        data: Dict[str, object] = result[filename]
 
-        ($testdata, $sumcount, _, _,
-         $testfncdata, $sumfnccount,
-         $testbrdata,  $sumbrcount) = get_info_entry($data)
+        (testdata, sumcount, _, _,
+         testfncdata, sumfnccount,
+         testbrdata,  sumbrcount,
+         _, _, _, _, _, _) = get_info_entry(data)
 
         # Filter out empty files
-        if len(keys(%{$sumcount})) == 0:
-            delete($result{$filename});
+        if len(sumcount) == 0:
+            del result[filename]
             continue
 
         # Filter out empty test cases
-        for $testname in keys(%{$testdata}):
-            if (!defined($testdata->{$testname}) ||
-                scalar(keys(%{$testdata->{$testname}})) == 0):
-                delete($testdata->{$testname});
-                delete($testfncdata->{$testname});
+        for testname in list(testdata.keys()):
+            if testdata[testname] is None or len(testdata[testname]) == 0:
+                del testdata[testname]
+                delete($testfncdata[testname])
 
-        $data->{"found"} = scalar(keys(%{$sumcount}));
-        $hitcount = 0;
-
-        for $_ in keys(%{$sumcount}):
-            if ($sumcount->{$_} > 0):
-                $hitcount += 1
-
-        $data->{"hit"} = $hitcount;
+        hitcount = 0
+        for count in sumcount.values():
+            if count > 0:
+                hitcount += 1
+        data["found"] = len(sumcount)
+        data["hit"]   = hitcount
 
         # Get found/hit values for function call data
-        $data->{"f_found"} = scalar(keys(%{$sumfnccount}));
-        $hitcount = 0;
-
-        for $_ in keys(%{$sumfnccount}):
-        {
-            if ($sumfnccount->{$_} > 0) {
-                $hitcount += 1
-            }
-        }
-        $data->{"f_hit"} = $hitcount;
+        hitcount = 0
+        for count in sumfnccount.values():
+            if count > 0:
+                hitcount += 1
+        data["f_found"] = len(sumfnccount)
+        data["f_hit"]   = hitcount
 
         # Combine branch data for the same branches
-        _, $data->{"b_found"}, $data->{"b_hit"} = compress_brcount($sumbrcount)
-        foreach $testname (keys(%{$testbrdata})):
-            compress_brcount($testbrdata->{$testname});
+        _, data["b_found"], data["b_hit"] = compress_brcount(sumbrcount)
+        for testname in testbrdata.keys():
+            compress_brcount(testbrdata[testname])
 
     if len(result) == 0:
-        die("ERROR: no valid records found in tracefile $tracefile\n")
-    if $negative:
-        warn("WARNING: negative counts found in tracefile $tracefile\n")
-    if $changed_testname:
-        warn("WARNING: invalid characters removed from testname in tracefile $tracefile\n")
+        die(f"ERROR: no valid records found in tracefile {tracefile}\n")
+    if negative:
+        warn(f"WARNING: negative counts found in tracefile {tracefile}\n")
+    if changed_testname:
+        warn(f"WARNING: invalid characters removed from testname in tracefile {tracefile}\n")
 
-    return %result
+    return result
 
-# OK
-def get_info_entry(entry: Dict):
-    # Retrieve data from an entry of the structure generated by read_info_file().
-    # Return a list of references to dicts:
-    # (test data  dict, sum count   dict, funcdata   dict, checkdata  dict,
-    # testfncdata dict, sumfnccount dict, testbrdata dict, sumbrcount dict,
-    # lines found, lines hit,
-    # functions found, functions hit,
-    # branches found, branches hit)
 
+def get_info_entry(entry: Dict[str, object]) -> Tuple:
+    """Retrieve data from an entry of the structure generated by read_info_file().
+    Return a tuple of references to dicts:
+    (test data  dict, sum count   dict, funcdata   dict, checkdata  dict,
+    testfncdata dict, sumfnccount dict, testbrdata dict, sumbrcount dict,
+    lines     found, lines     hit,
+    functions found, functions hit,
+    branches  found, branches  hit)
+    """
     testdata    = entry.get("test")
     sumcount    = entry.get("sum")
     funcdata    = entry.get("func")
@@ -1481,16 +1414,15 @@ def get_info_entry(entry: Dict):
             fn_found, fn_hit,
             br_found, br_hit)
 
-# OK
-def set_info_entry(entry,
+
+def set_info_entry(entry: Dict[str, object],
                    testdata, sumcount, funcdata, checkdata,
                    testfncdata, sumfcncount,
                    testbrdata,  sumbrcount,
                    ln_found=None ln_hit=None
                    fn_found=None fn_hit=None
                    br_found=None br_hit=None):
-    # Update the dict referenced by ENTRY with the provided data references.
-
+    """Update the dict referenced by ENTRY with the provided data references."""
     entry["test"]    = testdata
     entry["sum"]     = sumcount
     entry["func"]    = funcdata
@@ -1506,60 +1438,60 @@ def set_info_entry(entry,
     if br_found is not None: entry["b_found"] = br_found
     if br_hit   is not None: entry["b_hit"]   = br_hit
 
-# NOK
-def add_counts($data1_ref, $data2_ref):
-    # DATA1_REF and DATA2_REF are references to hashes containing a mapping
-    #
-    #   line number -> execution count
-    #
-    # Return a list (RESULT_REF, LINES_FOUND, LINES_HIT) where RESULT_REF
-    # is a reference to a hash containing the combined mapping in which
-    # execution counts are added.
 
-    %result = {}  # Resulting hash
-    $found  = 0   # Total number of lines found
-    $hit    = 0   # Number of lines with a count > 0
+def add_counts(data1: Dict[int, int],
+               data2: Dict[int, int]) -> Tuple[Dict[int, int], int, int]:
+    """DATA1 and DATA2 are references to hashes containing a mapping
+    
+      line number -> execution count
+    
+    Return a list (RESULT, LINES_FOUND, LINES_HIT) where RESULT is
+    a reference to a hash containing the combined mapping in which
+    execution counts are added.
+    """
 
-    for $line in keys(%$data1_ref):
-        data1_count: int = $data1_ref->{$line}
-        data2_count: int = $data2_ref->{$line}
+    result: Dict[int, int] = {}  # Resulting hash
+    found  = 0  # Total number of lines found
+    hit    = 0  # Number of lines with a count > 0
 
+    for line, data1_count in data1.items():
         # Add counts if present in both hashes
-        if defined(data2_count):
-            data1_count += data2_count
+        if line in data2:
+            data1_count += data2[line]
 
-        # Store sum in %result
-        $result{$line} = data1_count
+        # Store sum in result
+        result[line] = data1_count
 
-        $found += 1
+        found += 1
         if data1_count > 0:
             hit += 1
 
-    # Add lines unique to data2_ref
-    for $line in keys(%$data2_ref):
-        # Skip lines already in data1_ref
-        if $line in $data1_ref:
+    # Add lines unique to data2
+    for line, data2_count in data2.items():
+        # Skip lines already in data1
+        if line in data1:
             continue
 
-        # Copy count from data2_ref
-        $result{$line} = $data2_ref->{$line}
+        # Copy count from data2
+        result[line] = data2_count
 
-        $found += 1
-        if $result{$line} > 0:
+        found += 1
+        if data2_count > 0:
             hit += 1
 
-    return (%result, $found, $hit)
+    return (result, found, hit)
 
-# NOK
-def merge_checksums(dict1: Dict[int, object], dict2: Dict[int, object],
+
+def merge_checksums(dict1: Dict[int, object],
+                    dict2: Dict[int, object],
                     filename: str) -> Dict[int, object]:
-    # REF1 and REF2 are dicts containing a mapping
-    #
-    #   line number -> checksum
-    #
-    # Merge checksum lists defined in REF1 and REF2 and return resulting hash.
-    # Die if a checksum for a line is defined in both hashes but does not match.
-
+    """dict1 and dict2 are dicts containing a mapping
+    
+      line number -> checksum
+    
+    Merge checksum lists defined in dict1 and dict2 and return resulting hash.
+    Die if a checksum for a line is defined in both hashes but does not match.
+    """
     result: Dict[int, object] = {}
 
     for line, val1 in dict1.items():
@@ -1572,12 +1504,12 @@ def merge_checksums(dict1: Dict[int, object], dict2: Dict[int, object],
 
     return result
 
-# NOK
-def merge_func_data(funcdata1: Dict,
-                    funcdata2: Dict,
+
+def merge_func_data(funcdata1: Optional[Dict[object, int]],
+                    funcdata2: Dict[object, int],
                     filename: str) -> Dict[object, int]:
     """ """
-    result: Dict[object, int] = %{$funcdata1} if funcdata1 is not None else {}
+    result: Dict[object, int] = funcdata1.copy() if funcdata1 is not None else {}
     for func, line in funcdata2.items():
         if func in result and line != result[func]:
             warn(f"WARNING: function data mismatch at {filename}:{line}\n")
@@ -1586,12 +1518,12 @@ def merge_func_data(funcdata1: Dict,
 
     return result
 
-# NOK
-def add_fnccount(fnccount1: Optional[Dict[object, int]],
-                 fnccount2: Dict[object, int]) => Tuple[Dict[object, int], int, int]:
-    # Add function call count data.
-    # Return list (fnccount_added, fn_found, fn_hit)
 
+def add_fnccount(fnccount1: Optional[Dict[object, int]],
+                 fnccount2: Dict[object, int]) -> Tuple[Dict[object, int], int, int]:
+    """Add function call count data.
+    Return list (fnccount_added, fn_found, fn_hit)
+    """
     result: Dict[object, int] = fnccount1.copy() if fnccount1 is not None else {}
     for func, ccount in fnccount2.items():
         result[func] += ccount
@@ -1604,13 +1536,13 @@ def add_fnccount(fnccount1: Optional[Dict[object, int]],
 
     return (result, fn_found, fn_hit)
 
-# NOK
-def add_testfncdata(testfncdata1: Dict[str, object],
-                    testfncdata2: Dict[str, object]) -> Dict[str, object]:
-    # Add function call count data for several tests.
-    # Return reference to added_testfncdata.
 
-    result: Dict[str, object] = {}
+def add_testfncdata(testfncdata1: Dict[str, Tuple[Dict[object, int], int, int]],
+                    testfncdata2: Dict[str, Tuple[Dict[object, int], int, int]]) -> Dict[str, Tuple[Dict[object, int], int, int]]:
+    """Add function call count data for several tests.
+    Return reference to added_testfncdata.
+    """
+    result: Dict[str, Tuple[Dict[object, int], int, int]] = {}
 
     for testname in testfncdata1.keys():
         if testname in testfncdata2:
@@ -1629,65 +1561,6 @@ def add_testfncdata(testfncdata1: Dict[str, object],
             result[testname] = testfncdata2[testname]
 
     return result
-
-# NOK
-def brcount_to_db(brcount: Dict[int, str]) -> Dict:
-    # Convert brcount data to the following format:
-    #
-    # db:          line number    -> block hash
-    # block hash:  block number   -> branch hash
-    # branch hash: branch number  -> taken value
-
-    db = {}
-
-    # Add branches to database
-    for line, brdata in brcount.items():
-        for $entry in $brdata.split(":"):
-            block, branch, taken = $entry.split(",")
-
-            old = db[line]->{$block}->{$branch}
-            if !defined($old) or old == "-":
-                old = taken
-            elif taken != "-":
-                old += taken
-
-            db[line]->{$block}->{$branch} = old
-
-    return db
-
-# NOK
-def db_to_brcount($db: Dict;$) -> Tuple[Dict, int, int]:
-    # db_to_brcount(db[, brcount])
-    #
-    # Convert branch coverage data back to brcount format.
-    # If brcount is specified, the converted data is directly inserted in brcount.
-
-    my (, $brcount) = @_;
-
-    br_found = 0
-    br_hit   = 0
-
-    # Convert database back to brcount format
-    for $line in sorted({$a <=> $b} keys(%{$db})):
-        my $ldata = db[line]
-
-        my $brdata;
-        my $block;
-        for $block in sorted({$a <=> $b} keys(%{$ldata})):
-            my $bdata = $ldata->{$block};
-            my $branch;
-
-            for $branch in sorted({$a <=> $b} keys(%{$bdata})):
-                my $taken = $bdata->{$branch};
-
-                $br_found += 1
-                if $taken != "-" and $taken > 0:
-                    $br_hit += 1
-                $brdata += "$block,$branch,$taken:";
-
-        $brcount->{$line} = $brdata;
-
-    return ($brcount, br_found, br_hit)
 
 # NOK
 def brcount_db_combine(db1: Dict, db2: Dict, op: int):
@@ -1713,7 +1586,7 @@ def brcount_db_combine(db1: Dict, db2: Dict, op: int):
 
                 db1[line][block][branch] = br_count
 
-# OK
+
 def brcount_db_get_found_and_hit(db: Dict[int, Dict[object, Dict[object, object]]]) -> Tuple[int, int]:
     # Return (br_found, br_hit) for db.
     br_found, br_hit = 0, 0
@@ -1725,24 +1598,76 @@ def brcount_db_get_found_and_hit(db: Dict[int, Dict[object, Dict[object, object]
                     br_hit += 1
     return (br_found, br_hit)
 
-# OK
+
 def combine_brcount(brcount1: Dict[int, str],
                     brcount2: Dict[int, str],
-                    op, inplace=False) -> Tuple[Dict, int, int]:
-    # If op is BR_ADD, add branch coverage data and return list brcount_added.
-    # If op is BR_SUB, subtract the taken values of brcount2 from brcount1 and
-    # return brcount_sub.
-    # If inplace is set, the result is inserted into brcount1.
+                    op, *, inplace: bool = False) -> Tuple[Dict[int, str], int, int]:
+    """If op is BR_ADD, add branch coverage data and return list brcount_added.
+    If op is BR_SUB, subtract the taken values of brcount2 from brcount1 and
+    return brcount_sub.
+    If inplace is set, the result is inserted into brcount1.
+    """
     db1 = brcount_to_db(brcount1)
     db2 = brcount_to_db(brcount2)
     brcount_db_combine(db1, db2, op)
     return db_to_brcount(db1, brcount1 if inplace else None)
 
-# OK
-def add_testbrdata(testbrdata1: Dict, testbrdata2: Dict) -> Dict:
-    # Add branch coverage data for several tests.
-    # Return reference to added_testbrdata.
+# NOK
+def brcount_to_db(brcount: Dict[int, str]) -> Dict[int, Dict[???, Dict[???, str]]]:
+    """Convert brcount data to the following format:
+     db:          line number    -> block dict
+     block  dict: block number   -> branch dict
+     branch dict: branch number  -> taken value
+    """
+    db: Dict[int, Dict[???, Dict[???, str]]] = {}
 
+    # Add branches to database
+    for line, brdata in brcount.items():
+        for entry in brdata.split(":"):
+            block, branch, taken = entry.split(",")
+            if (line   not in db or
+                block  not in db[line] or
+                branch not in db[line][block] or
+                db[line][block][branch] == "-"):
+                if line not in db: db[line] = {}
+                if block not in db[line]: db[line][block] = {}
+                db[line][block][branch] = taken
+            elif taken != "-":
+                db[line][block][branch] += taken
+
+    return db
+
+# NOK
+def db_to_brcount(db: Dict[int, Dict[???, Dict[???, str]]],
+                  brcount: Optional[Dict[int, str]] = None) -> Tuple[Dict[int, str], int, int]:
+    """Convert branch coverage data back to brcount format.
+    If brcount is specified, the converted data is directly inserted in brcount.
+    """
+    if brcount is None: brcount = {}
+    br_found = 0
+    br_hit   = 0
+    # Convert database back to brcount format
+    for line in sorted({$a <=> $b} db.keys()):
+        ldata: Dict[???, Dict[???, str]] = db[line]
+        brdata = ""
+        for block in sorted({$a <=> $b} ldata.keys()):
+            bdata: Dict[???, str] = ldata[block]
+            for branch in sorted({$a <=> $b} bdata.keys()):
+                taken = bdata[branch]
+                br_found += 1
+                if taken != "-" and int(taken) > 0:
+                    br_hit += 1
+                brdata += f"{block},{branch},{taken}:"
+        brcount[line] = brdata
+
+    return (brcount, br_found, br_hit)
+
+
+def add_testbrdata(testbrdata1: Dict,
+                   testbrdata2: Dict) -> Dict:
+    """Add branch coverage data for several tests.
+    Return reference to added_testbrdata.
+    """
     result = {}
 
     for testname in testbrdata1.keys():
@@ -1764,11 +1689,11 @@ def add_testbrdata(testbrdata1: Dict, testbrdata2: Dict) -> Dict:
 
     return result
 
-# OK
-def combine_info_files(info1: Dict[str, Dict],
-                       info2: Dict[str, Dict]) -> Dict[str, Dict]:
-    # Combine .info data in infos referenced by INFO_REF1 and INFO_REF2.
-    # Return reference to resulting info.
+
+def combine_info_files(info1: Dict[str, Dict[str, object]],
+                       info2: Dict[str, Dict[str, object]]) -> Dict[str, Dict[str, object]]:
+    """Combine .info data in infos referenced by INFO_REF1 and INFO_REF2.
+    Return reference to resulting info."""
 
     info1 = info1.copy()
 
@@ -1785,159 +1710,108 @@ def combine_info_files(info1: Dict[str, Dict],
 
     return info1
 
-# NOK
-def combine_info_entries($entry1, $entry2, filename: str):
-    # Combine .info data entry hashes referenced by ENTRY_REF1 and ENTRY_REF2.
-    # Return reference to resulting hash.
 
-    my $testdata1;
-    my $sumcount1;
-    my $funcdata1;
-    my $checkdata1;
-    my $testfncdata1;
-    my $sumfnccount1;
-    my $testbrdata1;
-    my $sumbrcount1;
-
-    my $testdata2;
-    my $sumcount2;
-    my $funcdata2;
-    my $checkdata2;
-    my $testfncdata2;
-    my $sumfnccount2;
-    my $testbrdata2;
-    my $sumbrcount2;
-
-    my %result_testdata;
-    my $result_funcdata;
-    my $result_testfncdata;
-    my $result_sumfnccount;
-    my $result_testbrdata;
-    my $result_sumbrcount;
-    my $lines_found;
-    my $lines_hit;
-    my $br_found;
-    my $br_hit;
-
-    my $testname;
-
-    my %result;        # Hash containing combined entry
-    my $result_sumcount = {};
+def combine_info_entries(entry1: Dict[str, object],
+                         entry2: Dict[str, object],
+                         filename: str) -> Dict[str, object]:
+    """Combine .info data entry hashes referenced by ENTRY1 and ENTRY2.
+    Return reference to resulting hash."""
 
     # Retrieve data
-    ($testdata1, $sumcount1, $funcdata1, $checkdata1,
-     $testfncdata1,$sumfnccount1,
-     $testbrdata1, $sumbrcount1) = get_info_entry($entry1)
-    ($testdata2, $sumcount2, $funcdata2, $checkdata2,
-     $testfncdata2, $sumfnccount2,
-     $testbrdata2,  $sumbrcount2) = get_info_entry($entry2)
+    (testdata1, _, funcdata1, checkdata1,
+     testfncdata1, sumfnccount1,
+     testbrdata1,  sumbrcount1,
+     _, _, _, _, _, _) = get_info_entry(entry1)
+    (testdata2, _, funcdata2, checkdata2,
+     testfncdata2, sumfnccount2,
+     testbrdata2,  sumbrcount2,
+     _, _, _, _, _, _) = get_info_entry(entry2)
 
     # Merge checksums
-    $checkdata1 = merge_checksums($checkdata1, $checkdata2, filename)
+    result_checkdata = merge_checksums(checkdata1, checkdata2, filename)
 
     # Combine funcdata
-    $result_funcdata = merge_func_data($funcdata1, $funcdata2, filename)
+    result_funcdata = merge_func_data(funcdata1, funcdata2, filename)
 
     # Combine function call count data
-    $result_testfncdata = add_testfncdata($testfncdata1, $testfncdata2)
-    $result_sumfnccount, fn_found, fn_hit = add_fnccount($sumfnccount1,
-                                                           $sumfnccount2)
+    result_testfncdata = add_testfncdata(testfncdata1, testfncdata2)
+    result_sumfnccount, fn_found, fn_hit = add_fnccount(sumfnccount1,
+                                                        sumfnccount2)
     # Combine branch coverage data
-    $result_testbrdata = add_testbrdata($testbrdata1, $testbrdata2)
-    $result_sumbrcount, $br_found, $br_hit = combine_brcount($sumbrcount1,
-                                                             $sumbrcount2,
-                                                             BR_ADD)
+    result_testbrdata = add_testbrdata(testbrdata1, testbrdata2)
+    result_sumbrcount, br_found, br_hit = combine_brcount(sumbrcount1,
+                                                          sumbrcount2,
+                                                          BR_ADD)
     # Combine testdata
-    for $testname in %{$testdata1}.keys():
-        if $testname in $testdata2:
+
+    result_testdata: Dict[object, Tuple[Dict[int, int], int, int]] = {}
+    result_sumcount: Dict[int, int] = {}
+
+    for testname in testdata1.keys():
+        if testname in testdata2:
             # testname is present in both entries, requires combination
-            ($result_testdata{$testname}) = add_counts($testdata1->{$testname},
-                                                       $testdata2->{$testname})
+            result_testdata[testname] = add_counts(testdata1[testname],
+                                                   testdata2[testname])
         else:
             # testname only present in entry1, add to result
-            $result_testdata{$testname} = $testdata1->{$testname}
-
+            result_testdata[testname] = testdata1[testname]
         # update sum count hash
-        $result_sumcount, $lines_found, $lines_hit = add_counts($result_sumcount,
-                                                                $result_testdata{$testname})
+        result_sumcount, ln_found, ln_hit = add_counts(result_sumcount,
+                                                       result_testdata[testname])
 
-    for $testname in keys(%{$testdata2}):
+    for testname in testdata2.keys():
         # Skip testnames already covered by previous iteration
-        if $testname in $testdata1:
+        if testname in testdata1:
             continue
         # testname only present in entry2, add to result hash
-        $result_testdata{$testname} = $testdata2->{$testname}
+        result_testdata[testname] = testdata2[testname]
         # update sum count hash
-        $result_sumcount, $lines_found, $lines_hit = add_counts($result_sumcount,
-                                                                $result_testdata{$testname})
+        result_sumcount, ln_found, ln_hit = add_counts(result_sumcount,
+                                                       result_testdata[testname])
     # Calculate resulting sumcount
 
     # Store result
-    set_info_entry(\%result, \%result_testdata, $result_sumcount,
-                   $result_funcdata, $checkdata1, $result_testfncdata,
-                   $result_sumfnccount, $result_testbrdata,
-                   $result_sumbrcount, $lines_found, $lines_hit,
-                   fn_found, fn_hit, $br_found, $br_hit)
+    result: Dict[str, object] = {}  # Hash containing combined entry
+    set_info_entry(result,
+                   result_testdata, result_sumcount, result_funcdata, result_checkdata,
+                   result_testfncdata, result_sumfnccount,
+                   result_testbrdata,  result_sumbrcount,
+                   ln_found, ln_hit,
+                   fn_found, fn_hit,
+                   br_found, br_hit)
 
-    return %result
+    return result
 
-# OK
-def add_traces(add_tracefile: Iterable) -> Tuple[int, int, int, int, int, int]:
+
+def add_traces() -> Tuple[int, int, int, int, int, int]:
     """ """
+    global args
     global data_to_stdout
-    global output_filename
 
     info("Combining tracefiles.\n")
 
-    total_trace: Dict = None
-    for tracefile in add_tracefile:
-        current_trace = read_info_file(tracefile)
-        if total_trace is None:
-            total_trace = current_trace
-        else:
-            total_trace = combine_info_files(total_trace, current_trace)
+    total_trace: Dict[str, Dict[str, object]] = None
+    for tracefile in args.add_tracefile:
+        current = read_info_file(tracefile)
+        total_trace = current if total_trace is None else combine_info_files(total_trace, current)
 
     # Write combined data
     if not data_to_stdout:
-        info("Writing data to {output_filename}\n")
-        with open(output_filename, "wt") as fhandle:
-            or die("ERROR: cannot write to {output_filename}!\n")
-            result = write_info_file(fhandle, total_trace)
+        info(f"Writing data to {args.output_filename}\n")
+        try:
+            with Path(args.output_filename).open("wt") as fhandle:
+                result = write_info_file(fhandle, total_trace)
+        except:
+            die(f"ERROR: cannot write to {args.output_filename}!\n")
     else:
         result = write_info_file(sys.stdout, total_trace)
 
     return result
 
-# NOK
-def write_info_file(*INFO_HANDLE $) -> Tuple[int, int, int, int, int, int]:
-    #
-    # write_info_file(filehandle, data)
-    #
 
-    my %data = %{$_[1]};
-
-    my $source_file;
-    my $entry;
-    my $testdata;
-    my $sumcount;
-    my $funcdata;
-    my $checkdata;
-    my $testfncdata;
-    my $sumfnccount;
-    my $testbrdata;
-    my $sumbrcount;
-    my $testname;
-    my $line;
-    my $func;
-    my $testcount;
-    my $testfnccount;
-    my $testbrcount;
-    my $ln_found;
-    my $hit;
-    my $fn_found;
-    my $f_hit;
-    my $br_found;
-    my $br_hit;
+def write_info_file(fhandle, data: Dict[str, Dict[str, object]]) -> Tuple[int, int, int, int, int, int]:
+    """ """
+    global args
 
     ln_total_found = 0
     ln_total_hit   = 0
@@ -1946,159 +1820,155 @@ def write_info_file(*INFO_HANDLE $) -> Tuple[int, int, int, int, int, int]:
     br_total_found = 0
     br_total_hit   = 0
 
-    for $source_file in sorted(%data.keys()):
-        $entry = $data{$source_file};
+    for source_file in sorted(data.keys()):
+        entry = data[source_file]
 
-        ($testdata,    $sumcount, $funcdata, $checkdata,
-         $testfncdata, $sumfnccount,
-         $testbrdata,  $sumbrcount,
-         $ln_found,    $hit,
-         $fn_found,  $f_hit,
-         $br_found, $br_hit) = get_info_entry($entry)
+        (testdata,    sumcount, funcdata, checkdata,
+         testfncdata, sumfnccount,
+         testbrdata,  sumbrcount,
+         ln_found,    ln_hit,
+         fn_found,    fn_hit,
+         br_found,    br_hit) = get_info_entry(entry)
 
         # Add to totals
         ln_total_found += ln_found
         ln_total_hit   += hit
         fn_total_found += fn_found
-        fn_total_hit   += f_hit
+        fn_total_hit   += fn_hit
         br_total_found += br_found
         br_total_hit   += br_hit
 
-        for $testname in sorted(%{$testdata}.keys()):
+        for testname in sorted(testdata.keys()):
 
-            $testcount    = $testdata->{$testname}
-            $testfnccount = $testfncdata->{$testname}
-            $testbrcount  = $testbrdata->{$testname}
+            testlncount  = testdata[testname]
+            testfnccount = testfncdata[testname]
+            testbrcount  = testbrdata[testname]
 
-            $ln_found = 0
-            $hit   = 0
-
-            print(INFO_HANDLE f"TN:$testname\n")
-            print(INFO_HANDLE f"SF:$source_file\n")
+            print(f"TN:{testname}",    file=fhandle)
+            print(f"SF:{source_file}", file=fhandle)
 
             # Write function related data
-            for $func in sorted({$funcdata->{$a} <=> $funcdata->{$b}}
-                                keys(%{$funcdata})):
-                print(INFO_HANDLE "FN:".$funcdata->{$func}.",$func\n")
+            for func in sorted({funcdata[$a] <=> funcdata[$b]} funcdata.keys()): # NOK
+                fndata = funcdata[func]
+                print(f"FN:{fndata},{func}", file=fhandle)
 
-            for $func in keys(%{$testfnccount}):
-                print(INFO_HANDLE "FNDA:".
-                      $testfnccount->{$func}.",$func\n");
+            for func, ccount in testfnccount.items():
+                print(f"FNDA:{ccount},{func}", file=fhandle)
 
-            $fn_found, $f_hit = get_func_found_and_hit($testfnccount)
-            print(INFO_HANDLE f"FNF:$fn_found\n")
-            print(INFO_HANDLE f"FNH:$f_hit\n")
+            fn_found, fn_hit = get_func_found_and_hit(testfnccount)
+            print(f"FNF:{fn_found}", file=fhandle)
+            print(f"FNH:{fn_hit}",   file=fhandle)
 
             # Write branch related data
-            $br_found = 0
-            $br_hit   = 0
+            br_found = 0
+            br_hit   = 0
+            for line in sorted({$a <=> $b} testbrcount.keys()): # NOK
+                brdata = testbrcount[line]
+                for brentry in brdata.split(":"):
+                    block, branch, taken = brentry.split(",")
+                    print(f"BRDA:{line},{block},{branch},{taken}", file=fhandle)
+                    br_found += 1
+                    if taken != "-" and int(taken) > 0:
+                        br_hit += 1
 
-            for $line in sorted({$a <=> $b} keys(%{$testbrcount})):
-                my $brdata = $testbrcount->{$line};
-
-                for $brentry in $brdata.split(":"):
-                    $block, $branch, $taken = $brentry.split(",")
-
-                    print(INFO_HANDLE f"BRDA:$line,$block,"."$branch,$taken\n")
-                    $br_found += 1
-                    if $taken != '-' and $taken > 0:
-                        $br_hit += 1
-
-            if $br_found > 0:
-                print(INFO_HANDLE f"BRF:$br_found\n")
-                print(INFO_HANDLE f"BRH:$br_hit\n")
+            if br_found > 0:
+                print(f"BRF:{br_found}", file=fhandle)
+                print(f"BRH:{br_hit}",   file=fhandle)
 
             # Write line related data
-            for $line in sorted({$a <=> $b} keys(%{$testcount})):
+            ln_found = 0
+            ln_hit   = 0
+            for line in sorted({$a <=> $b} testlncount.keys()): # NOK
+                lndata = testlncount[line]
+                print(f"DA:{line},{lndata}" +
+                      (("," + checkdata[line]) if line in checkdata and args.checksum else ""),
+                      file=fhandle)
+                ln_found += 1
+                if lndata > 0:
+                    ln_hit += 1
 
-                print(INFO_HANDLE f"DA:$line," +
-                      $testcount->{$line} +
-                      (defined($checkdata->{$line}) and $checksum ? ",".$checkdata->{$line} : "") +
-                      "\n")
-                $ln_found += 1
-                if $testcount->{$line} > 0:
-                    hit += 1
-
-            print(INFO_HANDLE f"LF:$ln_found\n")
-            print(INFO_HANDLE f"LH:$hit\n")
-            print(INFO_HANDLE "end_of_record\n")
+            print(f"LF:{ln_found}", file=fhandle)
+            print(f"LH:{ln_hit}",   file=fhandle)
+            print("end_of_record",  file=fhandle)
 
     return (ln_total_found, ln_total_hit,
             fn_total_found, fn_total_hit,
             br_total_found, br_total_hit)
 
-# NOK
+
 def extract() -> Tuple[int, int, int, int, int, int]:
     """ """
+    global args
     global data_to_stdout
-    global output_filename
 
-    $data = read_info_file($extract)
+    data: Dict[str, Dict[str, object]] = read_info_file(args.extract)
 
     # Need perlreg expressions instead of shell pattern
-    @pattern_list = map({ transform_pattern($_); } @ARGV)
+    pattern_list: List[str] = [transform_pattern(elem) for elem in @ARGV] # NOK
 
     # Filter out files which do not match any pattern
-    $extracted = 0;
-    for $filename in sorted(keys(%{$data})):
+    extracted = 0
+    for filename in sorted(data.keys()):
+        keep = False
+        for pattern in pattern_list:
+            match = re.match(rf"^{pattern}$", filename)
+            keep = keep or match
 
-        $keep = False
-        for $pattern in @pattern_list:
-            $keep ||= ($filename =~ (/^$pattern$/));
-
-        if not $keep:
-            del $data->{$filename}
+        if not keep:
+            del data[filename]
         else:
-            info("Extracting $filename\n")
-            $extracted += 1
+            info(f"Extracting {filename}\n")
+            extracted += 1
 
     # Write extracted data
     if not data_to_stdout:
-        info("Extracted $extracted files\n")
-        info("Writing data to {output_filename}\n")
-        with open(output_filename, "wt") as INFO_HANDLE:
-            or die("ERROR: cannot write to {output_filename}!\n")
-            result = write_info_file(INFO_HANDLE, $data)
+        info(f"Extracted {extracted} files\n")
+        info(f"Writing data to {args.output_filename}\n")
+        try:
+            with Path(args.output_filename).open("wt") as fhandle:
+                result = write_info_file(fhandle, data)
+        except:
+            die(f"ERROR: cannot write to {args.output_filename}!\n")
     else:
-        result = write_info_file(sys.stdout, $data)
+        result = write_info_file(sys.stdout, data)
 
     return result
 
-# NOK
+
 def remove() -> Tuple[int, int, int, int, int, int]:
     """ """
+    global args
     global data_to_stdout
-    global output_filename
 
-    $data = read_info_file($remove)
-
-    my $match_found;
+    data: Dict[str, Dict[str, object]] = read_info_file(args.remove)
 
     # Need perlreg expressions instead of shell pattern
-    @pattern_list = map({ transform_pattern($_); } @ARGV)
+    pattern_list: List[str] = [transform_pattern(elem) for elem in @ARGV] # NOK
 
-    $removed = 0
+    removed = 0
     # Filter out files that match the pattern
-    for $filename in sorted(%{$data}.keys()):
+    for filename in sorted(data.keys()):
+        match_found = False
+        for pattern in pattern_list:
+            match = re.match(rf"^{pattern}$", filename)
+            match_found = match_found or match
 
-        $match_found = False
-        for $pattern in @pattern_list:
-            $match_found ||= ($filename =~ (/^$pattern$/));
-
-        if $match_found:
-            delete($data->{$filename});
-            info("Removing $filename\n")
-            $removed += 1
+        if match_found:
+            del data[filename]
+            info(f"Removing {filename}\n")
+            removed += 1
 
     # Write data
     if not data_to_stdout:
-        info("Deleted $removed files\n")
-        info("Writing data to {output_filename}\n")
-        with open(output_filename, "wt") as INFO_HANDLE:
-            or die("ERROR: cannot write to {output_filename}!\n")
-            result = write_info_file(INFO_HANDLE, $data)
+        info(f"Deleted {removed} files\n")
+        info(f"Writing data to {args.output_filename}\n")
+        try:
+            with Path(args.output_filename).open("wt") as fhandle:
+                result = write_info_file(fhandle, data)
+        except:
+            die(f"ERROR: cannot write to {args.output_filename}!\n")
     else:
-        result = write_info_file(sys.stdout, $data);
+        result = write_info_file(sys.stdout, data)
 
     return result
 
@@ -2129,9 +1999,9 @@ def get_prefix($max_width, $max_long, @path_list):
             pop(@dirs)
         for ($i = 0; $i < len(@dirs); $i++):
             $subpath = catpath($v, catdir(@dirs[0..$i]), '')
-            $entry   = $prefix{$subpath};
+            $entry   = $prefix{$subpath}
 
-            $entry = [ 0, 0 ] if (!defined($entry));
+            if ! defined($entry): $entry = [ 0, 0 ]
             $entry->[$ENTRY_NUM] += 1
             if ($p_len - length($subpath) - 1) > $max_width:
                 $entry->[$ENTRY_LONG] += 1
@@ -2154,60 +2024,16 @@ def get_prefix($max_width, $max_long, @path_list):
     return ""
 
 # NOK
-def shorten_filename(filename: str, width: int) -> str:
-    """Truncate filename if it is longer than width characters."""
-    l = len(filename)
-    if l <= width:
-        return filename
-    e = (width - 3) // 2
-    s = (width - 3) - e
-    return substr(filename, 0, s) + "..." + substr(filename, l - e)
-
-# OK
-def shorten_number(number: int, width: int) -> str:
-    result = "%*d" % (width, number)
-    if len(result) <= width:
-        return result
-    number //= 1000;
-    result = "%*dk" % (width - 1, number)
-    if len(result) <= width:
-        return result
-    number //= 1000;
-    result = "%*dM" % (width - 1, number)
-    if len(result) <= width:
-        return result
-    return "#"
-
-# OK
-def shorten_rate(hit: int, found: int, width: int) -> str:
-    result = rate(hit, found, "%", 1, width)
-    if len(result) <= width:
-        return result
-    result = rate(hit, found, "%", 0, width)
-    if len(result) <= width:
-        return result
-    return "#"
-
-# NOK
 def list():
+    global options
+    global args
 
-    my $data = read_info_file($list);
+    $data: Dict[str, Dict[str, object]] = read_info_file($list)
+
     my $filename;
     my $found;
     my $hit;
-    my $entry;
-    my $fn_found;
-    my $fn_hit;
-    my $br_found;
-    my $br_hit;
-    my $total_found = 0;
-    my $total_hit = 0;
-    my $fn_total_found = 0;
-    my $fn_total_hit = 0;
-    my $br_total_found = 0;
-    my $br_total_hit = 0;
     my $prefix;
-    my $strlen = length("Filename");
     my $format;
     my $heading1;
     my $heading2;
@@ -2217,18 +2043,23 @@ def list():
     my $fnrate;
     my $brrate;
     my $lastpath;
-    my $F_LN_NUM = 0;
-    my $F_LN_RATE = 1;
-    my $F_FN_NUM = 2;
-    my $F_FN_RATE = 3;
-    my $F_BR_NUM = 4;
-    my $F_BR_RATE = 5;
-    my @fwidth_narrow = (5, 5, 3, 5, 4, 5);
-    my @fwidth_wide = (6, 5, 5, 5, 6, 5);
+
+    F_LN_NUM  = 0
+    F_LN_RATE = 1
+    F_FN_NUM  = 2
+    F_FN_RATE = 3
+    F_BR_NUM  = 4
+    F_BR_RATE = 5
+
+    my @fwidth_narrow = (5, 5, 3, 5, 4, 5)
+    my @fwidth_wide   = (6, 5, 5, 5, 6, 5)
+
     my @fwidth = @fwidth_wide;
     my $w;
-    my $max_width = $opt_list_width;
-    my $max_long = $opt_list_truncate_max;
+
+    $max_width = options.list_width
+    $max_long  = options.list_truncate_max
+
     my $fwidth_narrow_length;
     my $fwidth_wide_length;
     my $got_prefix = 0;
@@ -2247,27 +2078,22 @@ def list():
     # Get common file path prefix
     $prefix = get_prefix($max_width - $fwidth_narrow_length, $max_long,
                  keys(%{$data}));
-    $root_prefix = 1 if ($prefix == rootdir());
-    $got_prefix  = 1 if (length($prefix) > 0);
+    if $prefix == rootdir(): $root_prefix = 1
+    if (length($prefix) > 0):  $got_prefix  = 1
     $prefix =~ s/\/$//;
-    # Get longest filename length
-    foreach $filename (keys(%{$data})) {
-        if not opt.list_full_path:
-        {
-            if (!$got_prefix || !$root_prefix &&
-                !($filename =~ s/^\Q$prefix\/\E//)) {
-                my ($v, $d, $f) = splitpath($filename);
 
-                $filename = $f;
-            }
-        }
+    # Get longest filename length
+    $strlen = len("Filename")
+    for $filename in (keys(%{$data})):
+        if not options.list_full_path:
+            if !$got_prefix or !$root_prefix and !($filename =~ s/^\Q$prefix\/\E//):
+                $v, $d, $f = splitpath($filename)
+                $filename = $f
         # Determine maximum length of entries
-        if (length($filename) > $strlen) {
-            $strlen = length($filename)
-        }
-    }
-    if not opt.list_full_path:
-    {
+        if len($filename) > $strlen:
+            $strlen = len($filename)
+
+    if not options.list_full_path:
         my $blanks;
 
         $w = $fwidth_wide_length;
@@ -2289,7 +2115,6 @@ def list():
             $strlen += $blanks;
         else:
             $strlen = $max_width - $w;
-    }
 
     # Filename
     w = $strlen;
@@ -2340,20 +2165,27 @@ def list():
     print($heading2);
     print(("="x$barlen)."\n");
 
+    ln_total_found = 0
+    ln_total_hit   = 0
+    fn_total_found = 0
+    fn_total_hit   = 0
+    br_total_found = 0
+    br_total_hit   = 0
+
     # Print per file information
-    for $filename in sorted(keys(%{$data})):
-    {
+    for $filename in sorted($data.keys()):
+
         my @file_data;
         my $print_filename = $filename;
 
-        $entry = $data->{$filename};
-        if not opt.list_full_path:
+        entry = $data->{$filename};
+        if not options.list_full_path:
         {
             my $p;
 
             $print_filename = $filename;
-            if (!$got_prefix || !$root_prefix &&
-                !($print_filename =~ s/^\Q$prefix\/\E//)) {
+            if (!$got_prefix or !$root_prefix and
+                !($print_filename =~ s/^\Q$prefix\/\E//)):
                 my ($v, $d, $f) = splitpath($filename);
 
                 $p = catpath($v, $d, "");
@@ -2361,9 +2193,8 @@ def list():
                 $print_filename = $f;
             else:
                 $p = $prefix;
-            }
 
-            if (!defined($lastpath) || $lastpath != $p) {
+            if (!defined($lastpath) or $lastpath != $p) {
                 print("\n") if (defined($lastpath));
                 $lastpath = $p;
                 print("[$lastpath/]\n") if (!$root_prefix);
@@ -2373,23 +2204,21 @@ def list():
 
         (_, _, _, _, _, _, _, _,
          $found,    $hit,
-         $fn_found, $fn_hit,
-         $br_found, $br_hit) = get_info_entry($entry)
+         fn_found, fn_hit,
+         br_found, br_hit) = get_info_entry(entry)
 
         # Assume zero count if there is no function data for this file
-        if (!defined($fn_found) || !defined($fn_hit)) {
+        if fn_found is None or fn_hit is None:
             fn_found = 0
             fn_hit   = 0
-        }
         # Assume zero count if there is no branch data for this file
-        if (!defined($br_found) || !defined($br_hit)) {
+        if br_found is None or br_hit is None:
             br_found = 0
             br_hit   = 0
-        }
 
         # Add line coverage totals
-        total_found += found
-        total_hit   += hit
+        ln_total_found += found
+        ln_total_hit   += hit
         # Add function coverage totals
         fn_total_found += fn_found
         fn_total_hit   += fn_hit
@@ -2405,20 +2234,19 @@ def list():
         brrate = shorten_rate(br_hit, br_found, $fwidth[$F_BR_RATE]);
 
         # Assemble line parameters
-        push(@file_data, $print_filename);
-        push(@file_data, $rate);
-        push(@file_data, shorten_number(found, $fwidth[$F_LN_NUM]));
-        push(@file_data, $fnrate);
-        push(@file_data, shorten_number(fn_found, $fwidth[$F_FN_NUM]));
-        push(@file_data, $brrate);
-        push(@file_data, shorten_number(br_found, $fwidth[$F_BR_NUM]));
+        @file_data.append($print_filename);
+        @file_data.append($rate);
+        @file_data.append(shorten_number(found, $fwidth[$F_LN_NUM]));
+        @file_data.append($fnrate);
+        @file_data.append(shorten_number(fn_found, $fwidth[$F_FN_NUM]));
+        @file_data.append($brrate);
+        @file_data.append(shorten_number(br_found, $fwidth[$F_BR_NUM]));
 
         # Print assembled line
         printf($format, @file_data);
-    }
 
     # Determine total line coverage rate
-    rate = shorten_rate(total_hit, total_found, $fwidth[$F_LN_RATE]);
+    rate = shorten_rate(ln_total_hit, ln_total_found, $fwidth[$F_LN_RATE]);
     # Determine total function coverage rate
     fnrate = shorten_rate(fn_total_hit, fn_total_found, $fwidth[$F_FN_RATE]);
     # Determine total branch coverage rate
@@ -2430,7 +2258,7 @@ def list():
     # Assemble line parameters
     @footer.append(sprintf("%*s", $strlen, "Total:"));
     @footer.append($rate);
-    @footer.append(shorten_number(total_found, $fwidth[$F_LN_NUM]));
+    @footer.append(shorten_number(ln_total_found, $fwidth[$F_LN_NUM]));
     @footer.append($fnrate);
     @footer.append(shorten_number(fn_total_found, $fwidth[$F_FN_NUM]));
     @footer.append($brrate);
@@ -2439,45 +2267,46 @@ def list():
     # Print assembled line
     printf($format, @footer);
 
+
+def shorten_filename(filename: str, width: int) -> str:
+    """Truncate filename if it is longer than width characters."""
+    # !!! przetestowac zgodnosc z Perlowa wersja !!!
+    l = len(filename)
+    if l <= width:
+        return filename
+    e = (width - 3) // 2
+    s = (width - 3) - e
+    return filename[:s] + "..." + filename[l - e:]
+
+
+def shorten_number(number: int, width: int) -> str:
+    """ """
+    result = "%*d" % (width, number)
+    if len(result) <= width:
+        return result
+    number //= 1000;
+    result = "%*dk" % (width - 1, number)
+    if len(result) <= width:
+        return result
+    number //= 1000;
+    result = "%*dM" % (width - 1, number)
+    if len(result) <= width:
+        return result
+    return "#"
+
+
+def shorten_rate(hit: int, found: int, width: int) -> str:
+    """ """
+    result = rate(hit, found, "%", 1, width)
+    if len(result) <= width:
+        return result
+    result = rate(hit, found, "%", 0, width)
+    if len(result) <= width:
+        return result
+    return "#"
+
 # NOK
-def get_common_filename(filename1: str,
-                        filename2: str) -> Optional[Tuple[str, str, str]]
-    # Check for filename components which are common to FILENAME1 and FILENAME2.
-    # Upon success, return
-    #
-    #   (common, path1, path2)
-    #
-    #  or None in case there are no such parts.
-
-    parts1 = filename1.split("/")
-    parts2 = filename2.split("/")
-
-    common = []
-    # Work in reverse order, i.e. beginning with the filename itself
-    while parts1 and parts2 and $parts1[$#parts1] == $parts2[$#parts2]:
-        unshift(common, parts1.pop())
-        parts2.pop()
-
-    # Did we find any similarities?
-    if common:
-        return ("/".join(common), "/".join(parts1), "/".join(parts2))
-    else:
-        return None
-
-# NOK
-def strip_directories(path: str, depth: Optional[Dict] = None):
-    """Remove DEPTH leading directory levels from PATH."""
-
-    if depth is None or depth < 1:
-        return path
-
-    for $i in range(depth):
-        $path =~ s/^[^\/]*\/+(.*)$/$1/;
-
-    return path
-
-# NOK
-def read_diff($diff_file):
+def read_diff(diff_file: Path) -> Tuple[Dict, Dict]:
     # Read diff output from FILENAME to memory. The diff file has to follow the
     # format generated by 'diff -u'. Returns a list of hash references:
     #
@@ -2489,27 +2318,24 @@ def read_diff($diff_file):
     #   path mapping:  filename -> old filename
     #
     # Die in case of error.
+    global args
 
-    my %diff;        # Resulting mapping filename -> line hash
-    my %paths;        # Resulting mapping old path  -> new path
     my $mapping;        # Reference to current line hash
-    my $line;        # Contents of current line
     my $num_old;        # Current line number in old file
     my $num_new;        # Current line number in new file
     my $file_old;        # Name of old file in diff section
     my $file_new;        # Name of new file in diff section
     my $filename;        # Name of common filename of diff section
-    local *HANDLE;        # File handle for reading the diff file
 
-    info("Reading diff $diff_file\n")
+    info(f"Reading diff {diff_file}\n")
 
     # Check if file exists and is readable
-    stat($diff_file)
-    if ! (-r _):
-        die("ERROR: cannot read file $diff_file!\n")
+    if not os.access(diff_file, os.R_OK):
+        die(f"ERROR: cannot read file {diff_file}!\n")
     # Check if this is really a plain file
+    fstatus = diff_file.stat()
     if ! (-f _):
-        die("ERROR: not a plain file: $diff_file!\n")
+        die(f"ERROR: not a plain file: {diff_file}!\n")
 
     # Check for .gz extension
     if $diff_file =~ /\.gz$/:
@@ -2517,28 +2343,31 @@ def read_diff($diff_file):
         system_no_output(1, "gunzip", "-h")
             and die("ERROR: gunzip command not available!\n")
         # Check integrity of compressed file
-        system_no_output(1, "gunzip", "-t", $diff_file)
-            and die("ERROR: integrity check failed for compressed file $diff_file!\n")
+        system_no_output(1, "gunzip", "-t", str(diff_file))
+            and die(f"ERROR: integrity check failed for compressed file {diff_file}!\n")
         # Open compressed file
-        HANDLE = open("-|", "gunzip -c '$diff_file'")
+        fhandle = open("-|", "gunzip -c 'str(diff_file)'")
             or die("ERROR: cannot start gunzip to decompress file $_[0]!\n")
     else:
         # Open decompressed file
-        HANDLE = open("<", $diff_file)
+        try:
+            fhandle = diff_file.open("rt")
+        except:
             or die("ERROR: cannot read file $_[0]!\n");
 
     # Parse diff file line by line
+    diff:  Dict = {}  # Resulting mapping filename -> line hash
+    paths: Dict = {}  # Resulting mapping old path -> new path
     in_block = False
-    with <HANDLE>:
-        for $_ in <HANDLE>:
-            $_ = $_.rstrip("\n")
-            $line = $_;
+    with fhandle:
+        for line in fhandle:
+            line = line.rstrip("\n")
 
             # Filename of old file:
             # --- <filename> <date>
             match = re.match(r"^--- (\S+)", line)
             if match:
-                $file_old = strip_directories($1, $strip)
+                $file_old = strip_directories($1, args.strip)
                 continue
 
             # Filename of new file:
@@ -2546,12 +2375,12 @@ def read_diff($diff_file):
             match = re.match(r"^\+\+\+ (\S+)", line)
             if match:
                 # Add last file to resulting hash
-                if ($filename):
-                    $diff{$filename} = $mapping
+                if $filename:
+                    diff[filename] = $mapping
                     $mapping = {}
-                $file_new = strip_directories($1, $strip)
+                $file_new = strip_directories($1, args.strip)
                 $filename = $file_old;
-                $paths[filename] = file_new
+                paths[filename] = file_new
                 num_old = 1
                 num_new = 1
                 continue
@@ -2604,70 +2433,75 @@ def read_diff($diff_file):
 
     # Add final diff file section to resulting hash
     if $filename:
-        $diff{$filename} = $mapping
+        diff[filename] = $mapping
 
     if ! %diff:
-        die("ERROR: no valid diff data found in $diff_file!\n"
+        die(f"ERROR: no valid diff data found in {diff_file}!\n"
             "Make sure to use 'diff -u' when generating the diff file.\n")
 
     return (%diff, %paths)
 
-# NOK
-def apply_diff($count_data, $line_hash):
-    # Transform count data using a mapping of lines:
-    #
-    #   $count_data: reference to hash: line number -> data
-    #   $line_hash:  reference to hash: line number new -> line number old
-    #
-    # Return a reference to transformed count data.
 
+def strip_directories(path: str, depth: Optional[int] = None) -> str:
+    """Remove depth leading directory levels from path."""
+    if depth is not None and depth >= 1:
+        for _ in range(depth):
+            path = re.sub(r"^[^/]*/+(.*)$", r"\1", path)
+    return path
+
+# NOK
+def apply_diff(count_data: Dict[int, object], line_hash: Dict[int, int]) -> Dict[int, object]:
+    """Transform count data using a mapping of lines:
+    
+      count_data: reference to hash: line number -> data
+      line_hash:  reference to hash: line number new -> line number old
+    
+    Return a reference to transformed count data.
+    """
     result: Dict[int, object] = {}  # Resulting hash
 
     last_new: int = 0  # Last new line number found in line hash
     last_old: int = 0  # Last old line number found in line hash
-
     # Iterate all new line numbers found in the diff
-    for $_ in sorted({$a <=> $b} keys(%{$line_hash})):
-        last_new = $_
-        last_old = $line_hash->{last_new}
-
+    for last_new in sorted({$a <=> $b} line_hash.keys()):
+        last_old = line_hash[last_new]
         # Is there data associated with the corresponding old line?
-        if defined($count_data->{$line_hash->{$_}}):
+        if last_old in count_data:
             # Copy data to new hash with a new line number
-            result[$_] = $count_data->{$line_hash->{$_}}
+            result[last_new] = count_data[last_old]
 
     # Transform all other lines which come after the last diff entry
-    for $_ in sorted({$a <=> $b} keys(%{$count_data})):
-        if $_ <= last_old:
+    for line in sorted({$a <=> $b} count_data.keys()):
+        if line <= last_old:
             # Skip lines which were covered by line hash
             continue
         # Copy data to new hash with an offset
-        result[$_ + (last_new - last_old)] = $count_data->{$_}
+        result[line + (last_new - last_old)] = count_data[line]
 
     return result
 
-# OK
+
 def apply_diff_to_brcount(brcount:  Dict[int, str],
-                          linedata: Dict[int, int]) -> Tuple[Dict, int, int]:
-    # Adjust line numbers of branch coverage data according to linedata.
-    #
-    # Convert brcount to db format
+                          linedata: Dict[int, int]) -> Tuple[Dict[int, str], int, int]:
+    """Adjust line numbers of branch coverage data according to linedata.
+
+    Convert brcount to db format
+    """
     db = brcount_to_db(brcount)
     # Apply diff to db format
     db = apply_diff(db, linedata)
     # Convert db format back to brcount format
     return db_to_brcount(db)
 
-# OK
+
 def apply_diff_to_funcdata(funcdata: Dict[object, int],
                            linedata: Dict[int, int]) -> Dict[object, int]:
-    # apply_diff_to_funcdata(funcdata, line_hash)
-
+    """ """
     last_new  = get_dict_max(linedata)
     last_old  = linedata[last_new]
     line_diff = reverse_dict(linedata)
 
-    result = {}
+    result: Dict[object, int] = {}
     for func, line in funcdata.items():
         if line in line_diff:
             result[func] = line_diff[line]
@@ -2676,7 +2510,7 @@ def apply_diff_to_funcdata(funcdata: Dict[object, int],
 
     return result
 
-# OK
+
 def get_dict_max(dict: Dict[int, int]) -> int:
     """Return the highest integer key from hash."""
     key_max = None
@@ -2686,8 +2520,7 @@ def get_dict_max(dict: Dict[int, int]) -> int:
     return key_max
 
 # NOK
-def get_line_hash(filename, diff_data, path_data):
-
+def get_line_hash(filename, diff_data: Dict, path_data: Dict) -> Optional[Tuple[?, ?, ?]]:
     # Find line hash in DIFF_DATA which matches FILENAME.
     # On success, return list line hash. or None in case of no match.
     # Die if more than one line hashes in DIFF_DATA match.
@@ -2704,20 +2537,19 @@ def get_line_hash(filename, diff_data, path_data):
     $diff_path =~ s/\/$//;
 
     for $_ in keys(%{$diff_data}):
-        my $sep = "";
-        if ! /^\//: $sep = '/'
+        $sep = ""
+        if ! /^\//: $sep = "/"
 
         # Try to match diff filename with filename
         if ($filename =~ /^\Q$diff_path$sep$_\E$/):
-            if ($diff_name)
+            if $diff_name:
                 # Two files match, choose the more specific one
                 # (the one with more path components)
                 $old_depth = ($diff_name =~ tr/\///);
                 $new_depth = (tr/\///);
-                if ($old_depth == $new_depth):
-                    die("ERROR: diff file contains ambiguous entries for "
-                        "$filename\n")
-                elsif ($new_depth > $old_depth):
+                if $old_depth == $new_depth:
+                    die(f"ERROR: diff file contains ambiguous entries for {filename}\n")
+                elif $new_depth > $old_depth:
                     $diff_name = $_;
             else:
                 $diff_name = $_;
@@ -2726,263 +2558,231 @@ def get_line_hash(filename, diff_data, path_data):
         # Get converted path
         if $filename =~ /^(.*)$diff_name$/:
             $common, $old_path, $new_path = get_common_filename($filename,
-                                                                $1.$path_data->{$diff_name})
+                                                                $1 + $path_data->{$diff_name})
         return ($diff_data->{$diff_name}, $old_path, $new_path)
     else:
         return None
 
 # NOK
-def convert_paths($trace_data, $path_conversion_data):
+def get_common_filename(filename1: str,
+                        filename2: str) -> Optional[Tuple[str, str, str]]
+    """Check for filename components which are common to FILENAME1 and FILENAME2.
+    Upon success, return
+
+      (common, path1, path2)
+
+    or None in case there are no such parts.
+    """
+    # !!! przetestowac zgodnosc z Perlowa wersja !!!
+    parts1 = filename1.split("/")
+    parts2 = filename2.split("/")
+
+    common = []
+    # Work in reverse order, i.e. beginning with the filename itself
+    while parts1 and parts2 and $parts1[$#parts1] == $parts2[$#parts2]:
+        common_part = parts1.pop()
+        parts2.pop()
+        unshift(common, common_part)
+
+    # Did we find any similarities?
+    if common:
+        return ("/".join(common), "/".join(parts1), "/".join(parts2))
+    else:
+        return None
+
+
+def diff() -> Tuple[int, int, int, int, int, int]:
+    """ """
+    global args
+    global data_to_stdout
+
+    trace_data: Dict[str, Dict[str, object]] = read_info_file(args.diff)
+
+    diff_data: Dict, path_data: Dict = read_diff(Path($ARGV[0])) # NOK
+
+    path_conversion_data: Dict[str, str] = {}
+    unchanged = 0
+    converted = 0
+    for filename in sorted(trace_data.keys()):
+
+        # Find a diff section corresponding to this file
+        line_hash_result = get_line_hash(filename, diff_data, path_data)
+        if line_hash_result is None:
+            # There's no diff section for this file
+            unchanged += 1
+            continue
+
+        line_hash, old_path, new_path = line_hash_result
+
+        converted += 1
+        if old_path and new_path and old_path != new_path:
+            path_conversion_data[old_path] = new_path
+
+        # Check for deleted files
+        if len(line_hash) == 0:
+            info(f"Removing {filename}\n")
+            del trace_data[filename]
+            continue
+
+        info(f"Converting {filename}\n")
+        entry = trace_data[filename]
+        (testdata, sumcount, funcdata, checkdata,
+         testfncdata, sumfnccount,
+         testbrdata,  sumbrcount) = get_info_entry(entry)
+
+        # Convert test data
+        for testname in list(testdata.keys()):
+            # Adjust line numbers of line coverage data
+            testdata[testname] = apply_diff(testdata[testname], line_hash)
+            # Adjust line numbers of branch coverage data
+            testbrdata[testname] = apply_diff_to_brcount(testbrdata[testname], line_hash)
+            # Remove empty sets of test data
+            if len(testdata[testname]) == 0:
+                del testdata[testname]
+                delete(testfncdata[testname]) # NOK
+                del testbrdata[testname]
+
+        # Rename test data to indicate conversion
+        for testname in list(testdata.keys()):
+            # Skip testnames which already contain an extension
+            if testname =~ r",[^,]+$": continue # NOK
+            testname_diff = testname + ",diff"
+
+            # Check for name conflict
+            if testname_diff in testdata:
+                # Add counts
+                testdata[testname] = add_counts(testdata[testname],
+                                                testdata[testname_diff])
+                del testdata[testname_diff]
+                # Add function call counts
+                testfncdata[testname] = add_fnccount(testfncdata[testname],
+                                                     testfncdata[testname_diff])
+                del testfncdata[testname_diff]
+                # Add branch counts
+                combine_brcount(testbrdata[testname],
+                                testbrdata[testname_diff],
+                                BR_ADD, inplace=True)
+                del testbrdata[testname_diff]
+
+            # Move test data to new testname
+            testdata[testname_diff] = testdata[testname]
+            del testdata[testname]
+            # Move function call count data to new testname
+            testfncdata[testname_diff] = testfncdata[testname]
+            del testfncdata[testname]
+            # Move branch count data to new testname
+            testbrdata[testname_diff] = testbrdata[testname]
+            del testbrdata[testname]
+
+        # Convert summary of test data
+        sumcount = apply_diff(sumcount, line_hash)
+        # Convert function data
+        funcdata = apply_diff_to_funcdata(funcdata, line_hash)
+        # Convert branch coverage data
+        sumbrcount = apply_diff_to_brcount(sumbrcount, line_hash)
+        # Update found/hit numbers
+        # Convert checksum data
+        checkdata = apply_diff(checkdata, line_hash)
+        # Convert function call count data
+        adjust_fncdata(funcdata, testfncdata, sumfnccount)
+        fn_found, fn_hit = get_func_found_and_hit(sumfnccount)
+        br_found, br_hit = get_branch_found_and_hit(sumbrcount)
+
+        # Update found/hit numbers
+        ln_found = 0
+        ln_hit   = 0
+        for count in sumcount.values():
+            ln_found += 1
+            if count > 0:
+                ln_hit += 1
+
+        if ln_found > 0:
+            # Store converted entry
+            set_info_entry(entry,
+                           testdata, sumcount, funcdata, checkdata,
+                           testfncdata, sumfnccount,
+                           testbrdata,  sumbrcount,
+                           ln_found, ln_hit,
+                           fn_found, fn_hit,
+                           br_found, br_hit)
+        else:
+            # Remove empty data set
+            del trace_data[filename]
+
+    # Convert filenames as well if requested
+    if args.convert_filenames:
+        convert_paths(trace_data, path_conversion_data)
+
+    info(f"{converted} entr" + ("ies" if converted != 1 else "y") + " converted, " +
+         f"{unchanged} entr" + ("ies" if unchanged != 1 else "y") + " left unchanged.\n")
+
+    # Write data
+    if not data_to_stdout:
+        info(f"Writing data to {args.output_filename}\n")
+        try:
+            with Path(args.output_filename).open("wt") as fhandle:
+                result = write_info_file(fhandle, trace_data)
+        except:
+            die(f"ERROR: cannot write to {args.output_filename}!\n")
+    else:
+        result = write_info_file(sys.stdout, trace_data)
+
+    return result
+
+# NOK
+def convert_paths($trace_data, path_conversion_data: Dict[str, str]):
     # Rename all paths in TRACE_DATA which show up in PATH_CONVERSION_DATA.
 
-    if len(%{$path_conversion_data}.keys()) == 0:
+    if len(path_conversion_data) == 0:
         info("No path conversion data available.\n")
         return
 
     # Expand path conversion list
-    foreach $filename (keys(%{$path_conversion_data})):
-        $new_path = $path_conversion_data->{$filename};
-        while (($filename =~ s/^(.*)\/[^\/]+$/$1/) &&
-               ($new_path =~ s/^(.*)\/[^\/]+$/$1/) &&
-               ($filename != $new_path)):
-            $path_conversion_data->{$filename} = $new_path
+    for filename in list(path_conversion_data.keys()):
+        new_path = path_conversion_data[filename]
+        while (($filename =~ s/^(.*)\/[^\/]+$/$1/) and
+               ($new_path =~ s/^(.*)\/[^\/]+$/$1/) and
+               filename != new_path):
+            path_conversion_data[filename] = new_path
 
     # Adjust paths
     FILENAME:
-    foreach $filename (keys(%{$trace_data}))
-    {
+    for filename in list($trace_data.keys()):
         # Find a path in our conversion table that matches, starting
         # with the longest path
-        for $_ in sorted({length($b) <=> length($a)}
-                         keys(%{$path_conversion_data})):
-        {
+        for $_ in sorted({length($b) <=> length($a)} path_conversion_data.keys()):
             # Is this path a prefix of our filename?
-            if (!($filename =~ /^$_(.*)$/)):
+            if ! ($filename =~ /^$_(.*)$/):
                 continue
 
-            $new_path = $path_conversion_data->{$_}.$1;
+            new_path = $path_conversion_data->{$_}.$1;
 
             # Make sure not to overwrite an existing entry under
             # that path name
-            if $trace_data->{$new_path}:
+            if trace_data[new_path]:
                 # Need to combine entries
-                $trace_data->{$new_path} = combine_info_entries($trace_data->{$filename},
-                                                                $trace_data->{$new_path},
-                                                                $filename)
+                trace_data[new_path] = combine_info_entries(trace_data[filename],
+                                                            trace_data[new_path],
+                                                            filename)
             else:
                 # Simply rename entry
-                $trace_data->{$new_path} = $trace_data->{$filename}
+                trace_data[new_path] = trace_data[filename]
 
-            delete($trace_data->{$filename});
+            del trace_data[filename]
             next FILENAME;
-        }
 
-        info("No conversion available for filename $filename\n");
-    }
+        info(f"No conversion available for filename {filename}\n")
 
-# OK
-def adjust_fncdata(funcdata:    Dict[object, object],
-                   testfncdata: Dict[object, object],
-                   sumfnccount: Dict[object, object]):
-    # Remove function call count data from testfncdata and sumfnccount
-    # which is no longer present in funcdata.
 
-    # Remove count data in testfncdata for functions which are no longer
-    # in funcdata
-    for testname, fnccount in testfncdata.items():
-        for func in fnccount:
-            if func not in funcdata:
-                fnccount.pop(func, None)
-
-    # Remove count data in sumfnccount for functions which are no longer
-    # in funcdata
-    for func in sumfnccount.keys():
-        if func not in funcdata:
-            sumfnccount.pop(func, None)
-
-# OK
-def get_func_found_and_hit(sumfnccount: Dict[object, int]) -> Tuple[int, int]:
-    # Return (fn_found, fn_hit) for sumfnccount
-    #
-    fn_found = len(sumfnccount)
-    fn_hit   = 0
-    for ccount in sumfnccount.values():
-        if ccount > 0:
-            fn_hit += 1
-    return (fn_found, fn_hit)
-
-# NOK
-def diff() -> Tuple[int, int, int, int, int, int]:
+def summary() -> Tuple[int, int, int, int, int, int]:
     """ """
-    global data_to_stdout
-    global output_filename
+    global args
 
-    my $trace_data = read_info_file($diff);
-
-    my $diff_data;
-    my $path_data;
-    my $old_path;
-    my $new_path;
-    my %path_conversion_data;
-    my $filename;
-    my $line_hash;
-    my $new_name;
-    my $entry;
-    my $testdata;
-    my $testname;
-    my $sumcount;
-    my $funcdata;
-    my $checkdata;
-    my $testfncdata;
-    my $sumfnccount;
-    my $testbrdata;
-    my $sumbrcount;
-    my $found;
-    my $hit;
-    my $fn_found;
-    my $fn_hit;
-    my $br_found;
-    my $br_hit;
-    my $converted = 0;
-    my $unchanged = 0;
-    my @result;
-    local *INFO_HANDLE;
-
-    $diff_data, $path_data = read_diff($ARGV[0])
-
-    for $filename in sorted(keys(%{$trace_data})):
-
-        # Find a diff section corresponding to this file
-        $line_hash, $old_path, $new_path = get_line_hash($filename, $diff_data, $path_data)
-        if ! $line_hash:
-            # There's no diff section for this file
-            $unchanged += 1
-            continue
-
-        $converted += 1
-        if $old_path and $new_path and $old_path != $new_path:
-            $path_conversion_data{$old_path} = $new_path
-
-        # Check for deleted files
-        if len(keys(%{$line_hash})) == 0:
-            info("Removing $filename\n")
-            delete($trace_data->{$filename});
-            continue
-
-        info("Converting $filename\n")
-        $entry = $trace_data->{$filename}
-        ($testdata, $sumcount, $funcdata, $checkdata,
-         $testfncdata, $sumfnccount,
-         $testbrdata,  $sumbrcount) = get_info_entry($entry)
-
-        # Convert test data
-        for $testname in keys(%{$testdata}):
-            # Adjust line numbers of line coverage data
-            $testdata->{$testname} = apply_diff($testdata->{$testname}, $line_hash)
-            # Adjust line numbers of branch coverage data
-            $testbrdata->{$testname} = apply_diff_to_brcount($testbrdata->{$testname},
-                                                             $line_hash)
-            # Remove empty sets of test data
-            if len(keys(%{$testdata->{$testname}})) == 0:
-                delete($testdata->{$testname});
-                delete($testfncdata->{$testname});
-                delete($testbrdata->{$testname});
-
-        # Rename test data to indicate conversion
-        for $testname in keys(%{$testdata}):
-            # Skip testnames which already contain an extension
-            if $testname =~ /,[^,]+$/:
-                continue
-
-            # Check for name conflict
-            if defined($testdata->{$testname.",diff"}):
-                # Add counts
-                ($testdata->{$testname}) = add_counts($testdata->{$testname},
-                                                      $testdata->{$testname.",diff"})
-                delete($testdata->{$testname.",diff"})
-                # Add function call counts
-                ($testfncdata->{$testname}) = add_fnccount($testfncdata->{$testname},
-                                                           $testfncdata->{$testname + ",diff"})
-                delete($testfncdata->{$testname.",diff"})
-                # Add branch counts
-                combine_brcount($testbrdata->{$testname},
-                                $testbrdata->{$testname.",diff"},
-                                BR_ADD, True)
-                delete($testbrdata->{$testname.",diff"})
-
-            # Move test data to new testname
-            $testdata->{$testname.",diff"} = $testdata->{$testname};
-            delete($testdata->{$testname});
-            # Move function call count data to new testname
-            $testfncdata->{$testname.",diff"} = $testfncdata->{$testname};
-            delete($testfncdata->{$testname});
-            # Move branch count data to new testname
-            $testbrdata->{$testname.",diff"} = $testbrdata->{$testname};
-            delete($testbrdata->{$testname});
-
-        # Convert summary of test data
-        $sumcount = apply_diff($sumcount, $line_hash);
-        # Convert function data
-        $funcdata = apply_diff_to_funcdata($funcdata, $line_hash)
-        # Convert branch coverage data
-        $sumbrcount = apply_diff_to_brcount($sumbrcount, $line_hash);
-        # Update found/hit numbers
-        # Convert checksum data
-        $checkdata = apply_diff($checkdata, $line_hash);
-        # Convert function call count data
-        adjust_fncdata($funcdata, $testfncdata, $sumfnccount)
-        $fn_found, $fn_hit = get_func_found_and_hit($sumfnccount)
-        $br_found, $br_hit = get_branch_found_and_hit($sumbrcount)
-
-        # Update found/hit numbers
-        $found = 0
-        $hit   = 0
-        for $_ in keys(%{$sumcount}):
-            $found += 1
-            if $sumcount->{$_} > 0:
-                hit += 1
-
-        if $found > 0:
-            # Store converted entry
-            set_info_entry($entry, $testdata, $sumcount, $funcdata,
-                           $checkdata, $testfncdata, $sumfnccount,
-                           $testbrdata, $sumbrcount, $found, $hit,
-                           $fn_found, $fn_hit, $br_found, $br_hit)
-        else:
-            # Remove empty data set
-            delete($trace_data->{$filename})
-
-    # Convert filenames as well if requested
-    if $convert_filenames:
-        convert_paths($trace_data, \%path_conversion_data);
-
-    info("$converted entr".($converted != 1 ? "ies" : "y")." converted, "
-         "$unchanged entr".($unchanged != 1 ? "ies" : "y")." left "
-         "unchanged.\n")
-
-    # Write data
-    if not data_to_stdout:
-        info("Writing data to {output_filename}\n")
-        with open(output_filename, "wt") as INFO_HANDLE:
-            or die("ERROR: cannot write to {output_filename}!\n")
-            result = write_info_file(INFO_HANDLE, $trace_data)
-    else:
-        result = write_info_file(sys.stdout, $trace_data)
-
-    return result
-
-# OK
-def summary(opt_summary: List) -> Tuple[int, int, int, int, int, int]:
-    """ """
-
-    total: Dict = None
+    total: Dict[str, Dict[str, object]] = None
     # Read and combine trace files
-    for filename in opt_summary:
+    for filename in args.summary:
         current = read_info_file(filename)
-        if total is None:
-            total = current
-        else:
-            total = combine_info_files(total, current)
+        total = current if total is None else combine_info_files(total, current)
 
     ln_total_found = 0
     ln_total_hit   = 0
@@ -3009,7 +2809,49 @@ def summary(opt_summary: List) -> Tuple[int, int, int, int, int, int]:
             fn_total_found, fn_total_hit,
             br_total_found, br_total_hit)
 
-# OK
+
+def adjust_fncdata(funcdata:    Dict[object, object],
+                   testfncdata: Dict[object, object],
+                   sumfnccount: Dict[object, object]):
+    """Remove function call count data from testfncdata and sumfnccount
+    which is no longer present in funcdata."""
+
+    # Remove count data in testfncdata for functions which are no longer
+    # in funcdata
+    for testname, fnccount in testfncdata.items():
+        for func in list(fnccount.keys()):
+            if func not in funcdata:
+                fnccount.pop(func, None)
+
+    # Remove count data in sumfnccount for functions which are no longer
+    # in funcdata
+    for func in list(sumfnccount.keys()):
+        if func not in funcdata:
+            sumfnccount.pop(func, None)
+
+
+def get_line_found_and_hit(dict: Dict[int, int]) -> Tuple[int, int]:
+    """Return the count for entries (found) and entries with an execution count
+    greater than zero (hit) in a dict (linenumber -> execution count) as
+    a list (found, hit)"""
+    found = len(dict)
+    hit   = sum(1 for count in dict.values() if count > 0)
+    return (found, hit)
+
+
+def get_func_found_and_hit(sumfnccount: Dict[object, int]) -> Tuple[int, int]:
+    """Return (fn_found, fn_hit) for sumfnccount"""
+    fn_found = len(sumfnccount)
+    fn_hit   = sum(1 for ccount in sumfnccount.values() if ccount > 0)
+    return (fn_found, fn_hit)
+
+
+def get_branch_found_and_hit(brcount: Dict[int, str]) -> Tuple[int, int]:
+    """ """
+    db = brcount_to_db(brcount)
+    return brcount_db_get_found_and_hit(db)
+
+
 def temp_cleanup():
     """ """
     global temp_dirs
@@ -3020,61 +2862,47 @@ def temp_cleanup():
         info("Removing temporary directories.\n")
         for dir in temp_dirs:
             shutil.rmtree(str(dir))
-        temp_dirs = []
+        temp_dirs.clear()
 
-# OK
+
 def setup_gkv_sys():
     system_no_output(3, "mount", "-t", "debugfs", "nodev", "/sys/kernel/debug")
 
-# OK
+
 def setup_gkv_proc():
     if (system_no_output(3, "modprobe", "gcov_proc")):
         system_no_output(3, "modprobe", "gcov_prof")
 
-# OK
-def check_gkv_sys(dir: Path) -> bool:
-    if (dir/"reset").exists():
-        return True
-    return False
 
-# OK
-def check_gkv_proc(dir: Path) -> bool:
-    if (dir/"vmlinux").exists():
-        return True
-    return False
-
-# OK
 def setup_gkv() -> Tuple[int, Path]:
-
-    global gcov_dir
+    """ """
+    global options
 
     sys_dir  = Path("/sys/kernel/debug/gcov")
     proc_dir = Path("/proc/gcov")
 
-    if gcov_dir is None:
+    if options.gcov_dir is None:
         info("Auto-detecting gcov kernel support.\n")
         todo = ["cs", "cp", "ss", "cs", "sp", "cp"]
-    elif re.search(r"proc", str(gcov_dir)):
-        info(f"Checking gcov kernel support at {gcov_dir} (user-specified).\n")
+    elif re.search(r"proc", str(options.gcov_dir)):
+        info(f"Checking gcov kernel support at {options.gcov_dir} (user-specified).\n")
         todo = ["cp", "sp", "cp", "cs", "ss", "cs"]
     else:
-        info(f"Checking gcov kernel support at {gcov_dir} (user-specified).\n")
+        info(f"Checking gcov kernel support at {options.gcov_dir} (user-specified).\n")
         todo = ["cs", "ss", "cs", "cp", "sp", "cp"]
 
     for action in todo:
         if action == "cs":
             # Check /sys
-            dir = gcov_dir or sys_dir
+            dir = options.gcov_dir or sys_dir
             if check_gkv_sys(dir):
-                info("Found {} gcov kernel support at {dir}\n".format(
-                     GKV_NAME[GKV_SYS], dir))
+                info(f"Found {GKV_NAME[GKV_SYS]} gcov kernel support at {dir}\n")
                 return (GKV_SYS, dir)
         elif action == "cp":
             # Check /proc
-            dir = gcov_dir or proc_dir
+            dir = options.gcov_dir or proc_dir
             if check_gkv_proc(dir):
-                info("Found {} gcov kernel support at {dir}\n".format(
-                     GKV_NAME[GKV_PROC], dir))
+                info(f"Found {GKV_NAME[GKV_PROC]} gcov kernel support at {dir}\n")
                 return (GKV_PROC, dir)
         elif action == "ss":
             # Setup /sys
@@ -3083,16 +2911,30 @@ def setup_gkv() -> Tuple[int, Path]:
             # Setup /proc
             setup_gkv_proc()
     else:
-        if gcov_dir:
-            die(f"ERROR: could not find gcov kernel data at {gcov_dir}\n")
+        if options.gcov_dir:
+            die(f"ERROR: could not find gcov kernel data at {options.gcov_dir}\n")
         else:
             die("ERROR: no gcov kernel data found\n")
 
-# OK
+
+def check_gkv_sys(dir: Path) -> bool:
+    """ """
+    if (dir/"reset").exists():
+        return True
+    return False
+
+
+def check_gkv_proc(dir: Path) -> bool:
+    """ """
+    if (dir/"vmlinux").exists():
+        return True
+    return False
+
+
 def print_overall_rate(ln_do: bool, ln_found: int, ln_hit: int,
                        fn_do: bool, fn_found: int, fn_hit: int,
                        br_do: bool, br_found: int, br_hit: int,
-                       *, title="Summary coverage rate:"):
+                       *, title: str = "Summary coverage rate:"):
     """Print overall coverage rates for the specified coverage types."""
     info(title + "\n")
     if ln_do:
@@ -3105,7 +2947,7 @@ def print_overall_rate(ln_do: bool, ln_found: int, ln_hit: int,
         info("  branches...: %s\n",
              get_overall_line(br_found, br_hit, "branch", "branches"))
 
-# OK
+
 def get_overall_line(found: Optional[int], hit: int,
                      name_singular: str, name_plural: str):
     # Return a string containing overall information for the specified
@@ -3116,37 +2958,37 @@ def get_overall_line(found: Optional[int], hit: int,
     name = name_singular if found == 1 else name_plural
     return rate(hit, found, f"% ({hit} of {found} {name})")
 
-# OK
+
 def check_rates(ln_found: int, ln_hit: int) -> int:
     """Check line coverage if it meets a specified threshold."""
+    global options
 
-    global opt
-
-    if opt.fail_under_lines <= 0:
+    if options.fail_under_lines <= 0:
         return 0
 
     if ln_found == 0:
         return 1
 
     actual_rate   = ln_hit / ln_found
-    expected_rate = opt.fail_under_lines / 100
+    expected_rate = options.fail_under_lines / 100
 
     if actual_rate < expected_rate:
         return 1
 
     return 0
 
-# OK
+
 def rate(hit: int, found: Optional[int],
          suffix: Optional[str] = None,
          precision: Optional[int] = None,
          width: Optional[int] = None) -> str:
-    # Return the coverage rate [0..100] for HIT and FOUND values. 0 is only
-    # returned when HIT is 0. 100 is only returned when HIT equals FOUND.
-    # PRECISION specifies the precision of the result. SUFFIX defines a
-    # string that is appended to the result if FOUND is non-zero. Spaces
-    # are added to the start of the resulting string until it is at least
-    # WIDTH characters wide.
+    """Return the coverage rate [0..100] for HIT and FOUND values.
+    0 is only returned when HIT is 0. 100 is only returned when HIT equals FOUND.
+    PRECISION specifies the precision of the result. SUFFIX defines a
+    string that is appended to the result if FOUND is non-zero. Spaces
+    are added to the start of the resulting string until it is at least
+    WIDTH characters wide.
+    """
     global default_precision
 
     # Assign defaults if necessary
@@ -3169,18 +3011,15 @@ def rate(hit: int, found: Optional[int],
 
 def main(argv=sys.argv[1:]):
 
-    # OK
     def warn_handler(msg: str):
         global tool_name
         warn(f"{tool_name}: {msg}")
 
-    # OK
     def die_handler(msg: str):
         global tool_name
         temp_cleanup()
         die(f"{tool_name}: {msg}")
 
-    # OK
     def abort_handler(msg: str):
         temp_cleanup()
         return 1
