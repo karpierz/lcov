@@ -3008,6 +3008,11 @@ def rate(hit: int, found: Optional[int],
 
 
 def main(argv=sys.argv[1:]):
+    """\
+    """
+    global tool_name
+    global lcov_version
+    global lcov_url
 
     def warn_handler(msg: str):
         global tool_name

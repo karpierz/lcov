@@ -3578,6 +3578,11 @@ def parent_dir(dir):
 
 
 def main(argv=sys.argv[1:]):
+    """\
+    """
+    global tool_name
+    global lcov_version
+    global lcov_url
 
     # NOK
     def int_handler()

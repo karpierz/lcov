@@ -3676,6 +3676,11 @@ def create_sub_dir($dir: Path):
         and die(f"ERROR: cannot create directory {dir}!\n")
 
 def main(argv=sys.argv[1:]):
+    """\
+    """
+    global tool_name
+    global lcov_version
+    global lcov_url
 
     def warn_handler(msg: str):
         global tool_name
