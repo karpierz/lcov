@@ -47,20 +47,23 @@ def remove_items_from_dict(dict: Dict, fns: List):
 
 
 def system_no_output(mode: int, *args) -> int:
-    # Call an external program using ARGS while suppressing
-    # depending on the value of MODE:
-    #
-    #   MODE & 1: suppress sys.stdout
-    #   MODE & 2: suppress sys.stderr
-    #
-    # Return 0 on success, non-zero otherwise.
-
+    """Call an external program using ARGS while suppressing
+    depending on the value of MODE:
+    
+      MODE & 1: suppress sys.stdout
+      MODE & 2: suppress sys.stderr
+    
+    Return 0 on success, non-zero otherwise.
+    """
     # Save previous stdout and stderr handles
     if mode & 1: prev_stdout = sys.stdout
     if mode & 2: prev_stderr = sys.stderr
-    # Redirect to /dev/null
-    if mode & 1: sys.stdout = open(os.devnull, "wb")
-    if mode & 2: sys.stderr = open(os.devnull, "wb")
+    if mode & 4:
+        pass
+    else:
+        # Redirect to /dev/null
+        if mode & 1: sys.stdout = open(os.devnull, "wb")
+        if mode & 2: sys.stderr = open(os.devnull, "wb")
     try:
         result = os.system(*args)
     finally:
@@ -191,8 +194,20 @@ def get_date_string() -> str:
     """Return the current date in the form: yyyy-mm-dd"""
     date_epoch = os.environ.get("SOURCE_DATE_EPOCH")
     if date_epoch is not None:
-        @timeresult = gmtime(date_epoch)
+        timeresult = gmtime(date_epoch)
     else:
-        @timeresult = localtime()
-    year, month, day, hour, min, sec = @timeresult[5, 4, 3, 2, 1, 0]
+        timeresult = localtime()
+    year, month, day, hour, min, sec = timeresult[5, 4, 3, 2, 1, 0]
     return "%d-%02d-%02d %02d:%02d:%02d" % (1900+year, month+1, day, hour, min, sec)
+
+
+def warn(message, *, end="\n"):
+    """ """
+    import warnings
+    warnings.warn(message + end)
+
+
+def die(message, *, end="\n"):
+    """ """
+    import sys
+    sys.exit(message + end)

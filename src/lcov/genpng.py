@@ -204,10 +204,12 @@ def main(argv=sys.argv[1:]):
 
     def warn_handler(msg: str):
         global tool_name
-        warn(f"{tool_name}: {msg}")
+        import warnings
+        warnings.warn(f"{tool_name}: {msg}")
 
     def die_handler(msg: str):
         global tool_name
+        import sys
         sys.exit(f"{tool_name}: {msg}")
 
     # $SIG{__WARN__} = warn_handler

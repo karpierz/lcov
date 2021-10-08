@@ -43,16 +43,16 @@ lcov
 
 #use strict;
 #use warnings;
-use File::Basename;
-use File::Path;
-use File::Find;
-use File::Temp qw /tempdir/;
-use File::Spec::Functions qw /abs2rel canonpath catdir catfile catpath
-                  file_name_is_absolute rootdir splitdir splitpath/;
-use Getopt::Long;
-use Cwd qw /abs_path getcwd/;
+#use File::Basename;
+#use File::Path;
+#use File::Find;
+#use File::Temp qw /tempdir/;
+#use File::Spec::Functions qw /abs2rel canonpath catdir catpath
+#                  file_name_is_absolute rootdir splitdir splitpath/;
+#use Getopt::Long;
+#use Cwd qw /abs_path/;
 
-from typing import List
+from typing import List, Dict, Optional
 import argparse
 import sys
 import re
@@ -60,6 +60,12 @@ import shutil
 from pathlib import Path
 
 from .util import reverse_dict
+from .util import write_file
+from .util import apply_config
+from .util import transform_pattern
+from .util import system_no_output
+from .util import strip_spaces_in_options
+from .util import warn, die
 
 # Global constants
 tool_name    = Path(__file__).stem
@@ -83,20 +89,6 @@ pkg_build_file = ".build_directory"
 BR_SUB = 0
 BR_ADD = 1
 
-# Prototypes
-from .util import strip_spaces_in_options
-sub print_usage(*);
-sub check_options();
-sub remove();
-sub list();
-sub diff();
-from .util import write_file
-from .util import apply_config
-sub info(@);
-sub rate($$;$$$);
-from .util import transform_pattern
-from .util import system_no_output
-
 # Global variables & initialization
 options.gcov_dir:       Optional[Path] = None  # Directory containing gcov kernel files
 options.tmp_dir:        Optional[Path] = None  # Where to create temporary directories
@@ -104,24 +96,23 @@ args.directory:         Optional[List] = None  # Specifies where to get coverage
 args.kernel_directory:  Optional[List] = None  # If set, captures only from specified kernel subdirs
 args.add_tracefile:     Optional[List] = None  # If set, reads in and combines all files in list
 our $list;        # If set, list contents of tracefile
-args.extract:           Optional[str] = None  # If set, extracts parts of tracefile
-args.remove:            Optional[str] = None  # If set, removes  parts of tracefile
-args.diff:              Optional[str] = None  # If set, modifies tracefile according to diff
-our $reset;        # If set, reset all coverage data to zero
-our $capture;        # If set, capture data
-args.output_filename:   Optional[str] = None  # Name for file to write coverage data to
+args.extract:           Optional[str] = None   # If set, extracts parts of tracefile
+args.remove:            Optional[str] = None   # If set, removes  parts of tracefile
+args.diff:              Optional[str] = None   # If set, modifies tracefile according to diff
+args.reset:             bool = False           # If set, reset all coverage data to zero
+args.capture:           bool = False           # If set, capture data
+args.output_filename:   Optional[str] = None   # Name for file to write coverage data to
 our $test_name = "";    # Test case name
-args.quiet: bool = False  # If set, suppress information messages
+args.quiet:             bool = False           # If set, suppress information messages
 our $help;        # Help option flag
 our $version;        # Version option flag
-args.convert_filenames: bool =  False  # If set, convert filenames when applying diff
-args.strip:             Optional[int] = None  # If set, strip leading directories when applying diff
+args.convert_filenames: bool =  False          # If set, convert filenames when applying diff
+args.strip:             Optional[int] = None   # If set, strip leading directories when applying diff
 our $temp_dir_name;    # Name of temporary directory
-our $cwd = `pwd`;    # Current working directory
-args.follow:            bool =  False  # If set, indicates that find shall follow links
+args.follow:            bool =  False          # If set, indicates that find shall follow links
 our $diff_path = "";    # Path removed from tracefile when applying diff
 options.fail_under_lines: int = 0
-args.base_directory:    Optional[str] = None  # Base directory (cwd of gcc during compilation)
+args.base_directory:    Optional[Path] = None  # Base directory (cwd of gcc during compilation)
 args.checksum;        # If set, calculate a checksum for each line
 args.no_checksum:       Optional[bool] = None  # If set, don't calculate a checksum for each line
 args.compat_libtool:    Optional[bool] = None  # If set, indicates that libtool mode is to be enabled
@@ -129,31 +120,30 @@ args.no_compat_libtool: Optional[bool] = None  # If set, indicates that libtool 
 args.gcov_tool:         Optional[str] = None
 our opt.ignore_errors;
 args.initial:           bool = False
-args.include_patterns:  List[str] = [] # List of source file patterns to include
-args.exclude_patterns:  List[str] = [] # List of source file patterns to exclude
-opt.no_recursion:       bool = False
+args.include_patterns:  List[str] = []         # List of source file patterns to include
+args.exclude_patterns:  List[str] = []         # List of source file patterns to exclude
+args.no_recursion:      bool = False
 args.to_package:        Optional[Path] = None
 args.from_package:      Optional[Path] = None
 our $maxdepth;
 args.no_markers:        bool = False
 our $config;        # Configuration file contents
-chomp($cwd);
 temp_dirs:              List[Path] = []
-gcov_gkv:               str = ""  # gcov kernel support version found on machine
-our opt.derive_func_data;
+gcov_gkv:               int = ???""            # gcov kernel support version found on machine
+args.derive_func_data:  Optional[???] = None
 our opt.debug;
 options.list_full_path: Optional[bool] = None
 args.no_list_full_path: Optional[bool] = None
 options.list_width:        int = 80
 options.list_truncate_max: int = 20
-args.external:         Optional[bool] = None
-args.no_external:      Optional[bool] = None
+args.external:          Optional[bool] = None
+args.no_external:       Optional[bool] = None
 our opt.config_file;
 our opt.rc:           Optional[Dict];
-args.summary:         Optional[List] = None
-our opt.compat;
-options.br_coverage:  bool = False
-options.fn_coverage:  bool = True
+args.summary:           Optional[List] = None
+args.compat:            Optional[str] = None
+options.br_coverage:    bool = False
+options.fn_coverage:    bool = True
 
 ln_overall_found: Optional[int] = None
 ln_overall_hit:   Optional[int] = None
@@ -161,6 +151,10 @@ fn_overall_found: Optional[int] = None
 fn_overall_hit:   Optional[int] = None
 br_overall_found: Optional[int] = None
 br_overall_hit:   Optional[int] = None
+
+cwd = Path.cwd()  # Current working directory
+our $cwd = `pwd`; # Current working directory
+chomp($cwd);
 
 #
 # Code entry point
@@ -201,16 +195,16 @@ if (!GetOptions(
         "diff=s"               => \args.diff,
         "convert-filenames"    => \args.convert_filenames,
         "strip=i"              => \args.strip,
-        "capture|c"            => \$capture,
+        "capture|c"            => \args.capture,
         "output-file|o=s"      => \args.output_filename,
         "test-name|t=s"        => \$test_name,
-        "zerocounters|z"       => \$reset,
+        "zerocounters|z"       => \args.reset,
         "quiet|q"              => \args.quiet,
         "help|h|?"             => \$help,
         "version|v"            => \$version,
         "follow|f"             => \args.follow,
         "path=s"               => \$diff_path,
-        "base-directory|b=s"   => \args.base_directory,
+        "base-directory|b=s"   => \Path(args.base_directory),
         "checksum"             => \args.checksum,
         "no-checksum"          => \args.no_checksum,
         "compat-libtool"       => \args.compat_libtool,
@@ -265,7 +259,7 @@ if $version:
 # Check list width option
 if options.list_width <= 40:
     die("ERROR: lcov_list_width parameter out of range (needs to be "
-        "larger than 40)\n")
+        "larger than 40)")
 
 # Normalize --path text
 $diff_path =~ s/\/$//;
@@ -278,31 +272,31 @@ check_options()
 # Only --extract, --remove and --diff allow unnamed parameters
 if @ARGV and !(args.extract is not None or args.remove is not None or args.diff or args.summary):
     die("Extra parameter found: '".join(" ", @ARGV)."'\n"
-        f"Use {tool_name} --help to get usage information\n")
+        f"Use {tool_name} --help to get usage information")
 
 # If set, indicates that data is written to stdout
 # Check for output filename
 data_to_stdout: bool = not (args.output_filename and args.output_filename != "-")
 
-if $capture:
+if args.capture:
     if data_to_stdout:
         # Option that tells geninfo to write to stdout
         args.output_filename = "-"
 
 # Determine kernel directory for gcov data
-if not args.from_package and not args.directory and ($capture or $reset):
+if not args.from_package and not args.directory and (args.capture or args.reset):
     gcov_gkv, options.gcov_dir = setup_gkv()
 
 our $exit_code = 0
 # Check for requested functionality
-if $reset:
+if args.reset:
     data_to_stdout = False
     # Differentiate between user space and kernel reset
     if args.directory:
         userspace_reset()
     else:
         kernel_reset()
-elif $capture:
+elif args.capture:
     # Capture source can be user space, kernel or package
     if args.from_package:
         package_capture()
@@ -311,7 +305,7 @@ elif $capture:
     else:
         if args.initial:
             if args.to_package:
-                die("ERROR: --initial cannot be used together with --to-package\n")
+                die("ERROR: --initial cannot be used together with --to-package")
             kernel_capture_initial()
         else:
             kernel_capture()
@@ -329,11 +323,11 @@ elif args.extract is not None:
      br_overall_found, br_overall_hit) = extract()
 elif $list:
     data_to_stdout = False
-    list()
+    listing()
 elif args.diff:
     if len(@ARGV) != 1:
         die("ERROR: option --diff requires one additional argument!\n"
-            f"Use {tool_name} --help to get usage information\n")
+            f"Use {tool_name} --help to get usage information")
     (ln_overall_found, ln_overall_hit,
      fn_overall_found, fn_overall_hit,
      br_overall_found, br_overall_hit) = diff()
@@ -351,18 +345,17 @@ if ln_overall_found is not None:
                        True, fn_overall_found, fn_overall_hit,
                        True, br_overall_found, br_overall_hit)
 else:
-    if ! $list and ! $capture:
+    if ! $list and not args.capture:
         info("Done.\n")
 
 sys.exit($exit_code)
 
 
-# print_usage(handle)
-#
-# Print usage information.
-
 # NOK
 def print_usage(*HANDLE):
+    # print_usage(handle)
+    #
+    # Print usage information.
 
     print(HANDLE <<END_OF_USAGE);
 Usage: $tool_name [OPTIONS]
@@ -428,8 +421,8 @@ def check_options():
 
     # Count occurrence of mutually exclusive options
     options = (
-        $reset,
-        $capture,
+        args.reset,
+        args.capture,
         args.add_tracefile,
         args.extract,
         args.remove,
@@ -442,11 +435,11 @@ def check_options():
     if count == 0:
         die("Need one of options -z, -c, -a, -e, -r, -l, "
             "--diff or --summary\n"
-            f"Use {tool_name} --help to get usage information\n")
+            f"Use {tool_name} --help to get usage information")
     elif count > 1:
         die("ERROR: only one of -z, -c, -a, -e, -r, -l, "
             "--diff or --summary allowed!\n"
-            f"Use {tool_name} --help to get usage information\n")
+            f"Use {tool_name} --help to get usage information")
 
 #class LCov:
 
@@ -469,7 +462,7 @@ def userspace_reset():
             try:
                 filename.unlink()
             except:
-                die(f"ERROR: cannot remove file {filename}!\n")
+                die(f"ERROR: cannot remove file {filename}!")
 
 
 def userspace_capture():
@@ -485,10 +478,10 @@ def userspace_capture():
         return
 
     if len(args.directory) != 1:
-        die("ERROR: -d may be specified only once with --to-package\n")
+        die("ERROR: -d may be specified only once with --to-package")
 
     dir   = Path(args.directory[0])
-    build = args.base_directory if args.base_directory is not None else str(dir)
+    build = args.base_directory if args.base_directory is not None else dir
 
     create_package(args.to_package, dir, build)
 
@@ -506,11 +499,11 @@ def kernel_reset():
     elif (options.gcov_dir/"reset").exists():
         reset_file = options.gcov_dir/"reset"
     else:
-        die(f"ERROR: no reset control found in {options.gcov_dir}\n")
+        die(f"ERROR: no reset control found in {options.gcov_dir}")
     try:
         reset_file.write("0")
     except:
-        die(f"ERROR: cannot write to {reset_file}!\n")
+        die(f"ERROR: cannot write to {reset_file}!")
 
 # NOK
 def lcov_find(dir: Path, func: Callable, $data, pattern: Optional[List] = None):
@@ -562,26 +555,26 @@ def lcov_copy(path_from: Path, path_to: Path, subdirs: List[object]):
 def lcov_copy_fn(path_from: Path, $rel, path_to: Path):
     """Copy directories, files and links from/rel to to/rel."""
 
-    abs_from = Path(canonpath(path_from/$rel))
-    abs_to   = Path(canonpath(path_to/$rel))
+    abs_from = Path(canonpath(path_from/rel))
+    abs_to   = Path(canonpath(path_to/rel))
 
     if (-d):
-        if (! -d $abs_to):
+        if (not -d $abs_to):
             try:
                 mkpath($abs_to)
             except:
-                die(f"ERROR: cannot create directory {abs_to}\n")
+                die(f"ERROR: cannot create directory {abs_to}")
             abs_to.chmod(0o0700)
     elif (-l):
         # Copy symbolic link
         try:
             link = readlink($abs_from)
         except Exception as exc:
-            die(f"ERROR: cannot read link {abs_from}: {exc}!\n")
+            die(f"ERROR: cannot read link {abs_from}: {exc}!")
         try:
             symlink($link, $abs_to)
         except Exception as exc:
-            die(f"ERROR: cannot create link {abs_to}: {exc}!\n")
+            die(f"ERROR: cannot create link {abs_to}: {exc}!")
     else:
         lcov_copy_single(abs_from, abs_to)
         abs_to.chmod(0o0600)
@@ -597,11 +590,11 @@ def lcov_copy_single(path_from: Path, path_to: Path):
     try:
         content = path_from.read_text()
     except Exception as exc:
-        die(f"ERROR: cannot read {path_from}: {exc}!\n")
+        die(f"ERROR: cannot read {path_from}: {exc}!")
     try:
         path_to.write_text(content or "")
     except Exception as exc:
-        die(f"ERROR: cannot write {path_to}: {exc}!\n")
+        die(f"ERROR: cannot write {path_to}: {exc}!")
 
 # NOK
 def lcov_geninfo(*dirs):
@@ -630,7 +623,7 @@ def lcov_geninfo(*dirs):
     if args.checksum is not None:
         param += ["--checksum"] if args.checksum else ["--no-checksum"]
     if args.base_directory:
-        param += ["--base-directory", args.base_directory]
+        param += ["--base-directory", str(args.base_directory)]
     if args.no_compat_libtool:
         param += ["--no-compat-libtool"]
     elif args.compat_libtool:
@@ -669,7 +662,7 @@ def lcov_geninfo(*dirs):
         and sys.exit($? >> 8)
 
 # NOK
-def get_package(package_file: Path) -> Tuple[Path, Optional[str], object]:
+def get_package(package_file: Path) -> Tuple[Path, Optional[Path], Optional[int]]:
     """Unpack unprocessed coverage data files from package_file to a temporary
     directory and return directory name, build directory and gcov kernel version
     as found in package.
@@ -688,34 +681,35 @@ def get_package(package_file: Path) -> Tuple[Path, Optional[str], object]:
         try:
             fhandle = open("-|", "tar xvfz '$package_file' 2>/dev/null")
         except:
-            die(f"ERROR: could not process package {package_file}\n")
+            die(f"ERROR: could not process package {package_file}")
         count = 0;
         with fhandle:
             while (<fhandle>):
                 if (/\.da$/ or /\.gcda$/):
                     count += 1
         if count == 0:
-            die(f"ERROR: no data file found in package {package_file}\n")
+            die(f"ERROR: no data file found in package {package_file}")
         info(f"  data directory .......: {dir}\n")
         fpath = dir/pkg_build_file
         build = read_file(fpath)
         if build is not None:
+            build = Path(build)
             info(f"  build directory ......: {build}\n")
         fpath = dir/pkg_gkv_file
         $gkv = read_file(fpath)
-        if defined($gkv):
-            $gkv = int($gkv)
-            if $gkv != GKV_PROC and $gkv != GKV_SYS:
-                die("ERROR: unsupported gcov kernel version found ($gkv)\n")
+        if $gkv is not None:
+            gkv = int(gkv)
+            if gkv != GKV_PROC and gkv != GKV_SYS:
+                die(f"ERROR: unsupported gcov kernel version found ({gkv})")
             info("  content type .........: kernel data\n")
-            info("  gcov kernel version ..: %s\n", GKV_NAME[$gkv])
+            info("  gcov kernel version ..: %s\n", GKV_NAME[gkv])
         else:
             info("  content type .........: application data\n")
         info(f"  data files ...........: {count}\n")
     finally:
         os.chdir(cwd)
 
-    return (dir, build, $gkv)
+    return (dir, build, gkv)
 
 
 def count_package_data(filename: Path) -> Optional[int]:
@@ -732,8 +726,11 @@ def count_package_data(filename: Path) -> Optional[int]:
                 count += 1
     return count
 
-# NOK
-def create_package(package_file: Path, dir: Path, $build: Optional, gkv: Optional[str] = None)
+
+def create_package(package_file: Path, dir: Path, build: Optional[Path],
+                   gcov_kernel_version: Optional[int] = None)
+    """ """
+    # NOK
     # create_package(package_file, source_directory, build_directory[, kernel_gcov_version])
     global args
     global pkg_gkv_file, pkg_build_file
@@ -743,8 +740,10 @@ def create_package(package_file: Path, dir: Path, $build: Optional, gkv: Optiona
     cwd = Path.cwd()
     try:
         # Check for availability of tar tool first
-        system("tar --help > /dev/null")
-            and die("ERROR: tar command not available\n")
+        try:
+            system("tar --help > /dev/null") # NOK
+        exept
+            die("ERROR: tar command not available")
 
         # Print information about the package
         info(f"Creating package {package_file}:\n")
@@ -757,25 +756,25 @@ def create_package(package_file: Path, dir: Path, $build: Optional, gkv: Optiona
             try:
                 write_file(fpath, str(build))
             except:
-                die(f"ERROR: could not write to {fpath}\n")
+                die(f"ERROR: could not write to {fpath}")
 
         # Handle gcov kernel version data
-        if gkv is not None:
-            info("  content type .........: kernel data\n");
-            info("  gcov kernel version ..: %s\n", GKV_NAME[gkv])
+        if gcov_kernel_version is not None:
+            info("  content type .........: kernel data\n")
+            info("  gcov kernel version ..: %s\n", GKV_NAME[gcov_kernel_version])
             fpath = dir/pkg_gkv_file
             try:
-                write_file(fpath, gkv)
+                write_file(fpath, str(gcov_kernel_version))
             except:
-                die(f"ERROR: could not write to {fpath}\n")
+                die(f"ERROR: could not write to {fpath}")
         else:
             info("  content type .........: application data\n")
 
         # Create package
-        package_file = Path(abs_path(str(package_file)))
-        os.chdir(dir);
+        package_file = Path(abs_path(str(package_file))) # NOK
+        os.chdir(dir)
         system("tar cfz {package_file} .")
-            and die(f"ERROR: could not create package {package_file}\n")
+            and die(f"ERROR: could not create package {package_file}")
     finally:
         os.chdir(cwd)
 
@@ -789,11 +788,12 @@ def create_package(package_file: Path, dir: Path, $build: Optional, gkv: Optiona
         if count is not None:
             info(f"  data files ...........: {count}\n")
 
-# NOK
+
 def get_base(dir: Path) -> Tuple[Optional[Path], Optional[Path]]:
-    # Return (BASE, OBJ), where
-    #  - BASE: is the path to the kernel base directory relative to dir
-    #  - OBJ:  is the absolute path to the kernel build directory
+    """Return (BASE, OBJ), where
+     - BASE: is the path to the kernel base directory relative to dir
+     - OBJ:  is the absolute path to the kernel build directory
+    """
 
     marker = "kernel/gcov/base.gcno"
 
@@ -802,21 +802,21 @@ def get_base(dir: Path) -> Tuple[Optional[Path], Optional[Path]]:
         return (None, None)
 
     # sys base is parent of parent of markerfile.
-    sys_base = Path(abs2rel(str(marker_file.parent.parent.parent), str(dir)))
+    sys_base = Path(abs2rel(str(marker_file.parent.parent.parent), str(dir))) # NOK
 
     # build base is parent of parent of markerfile link target.
     try:
-        link = readlink(str(marker_file))
+        link = readlink(str(marker_file)) # NOK
     except Exception as exc:
-        die(f"ERROR: could not read {markerfile}\n")
+        die(f"ERROR: could not read {markerfile}")
     build = Path(link).parent.parent.parent
 
     return (sys_base, build)
 
-# NOK
+
 def find_link_fn(path_from: Path, rel, filename):
     abs_file = path_from/rel/filename
-    return abs_file if (-l str(abs_file) else None
+    return abs_file if (-l str(abs_file) else None # NOK
 
 # NOK
 def apply_base_dir($data: Path, $base: Optional[Path], $build, dirs: List) -> List:
@@ -844,10 +844,10 @@ def apply_base_dir($data: Path, $base: Optional[Path], $build, dirs: List) -> Li
 
         # Relative to the specified base-directory?
         if args.base_directory is not None:
-            if file_name_is_absolute(args.base_directory):
-                $base = abs2rel(args.base_directory, rootdir())
+            if file_name_is_absolute(str(args.base_directory)):
+                $base = abs2rel(str(args.base_directory), rootdir())
             else:
-                $base = args.base_directory
+                $base = str(args.base_directory)
             if (-d catdir($data, $base, $dir)):
                 result.append(catdir($base, $dir))
                 continue
@@ -863,7 +863,7 @@ def apply_base_dir($data: Path, $base: Optional[Path], $build, dirs: List) -> Li
                 continue
 
         die(f"ERROR: subdirectory {dir} not found\n"
-            "Please use -b to specify the correct directory\n")
+            "Please use -b to specify the correct directory")
 
     return result
 
@@ -896,8 +896,7 @@ def kernel_capture_initial():
         _, build = get_base(options.gcov_dir)
         if build is None:
             die("ERROR: could not auto-detect build directory.\n"
-                "Please use -b to specify the build directory\n")
-        build  = str(build)
+                "Please use -b to specify the build directory")
         source = "auto-detected"
 
     info(f"Using {build} as kernel build directory ({source})\n")
@@ -906,7 +905,7 @@ def kernel_capture_initial():
     params = []
     if args.kernel_directory:
         for dir in args.kernel_directory:
-            params.append(f"{build}/{dir}")
+            params.append(build/dir)
     else:
         params.append(build)
 
@@ -926,7 +925,7 @@ def adjust_kernel_dir(dir: Path, build: Optional[Path]) -> Path:
         build = build_auto
     if build is None:
         die("ERROR: could not auto-detect build directory.\n"
-            "Please use -b to specify the build directory\n")
+            "Please use -b to specify the build directory")
 
     # Make kernel_directory relative to sysfs base
     if args.kernel_directory:
@@ -934,7 +933,7 @@ def adjust_kernel_dir(dir: Path, build: Optional[Path]) -> Path:
                                                args.kernel_directory)
     return build
 
-# NOK
+
 def kernel_capture():
 
     global options
@@ -943,68 +942,68 @@ def kernel_capture():
 
     build = args.base_directory
     if gcov_gkv == GKV_SYS:
-        build = adjust_kernel_dir(options.gcov_dir, Path(build) if build is not None else None).to_posix()
+        build = adjust_kernel_dir(options.gcov_dir, build)
 
     data_dir = copy_gcov_dir(options.gcov_dir, args.kernel_directory)
     kernel_capture_from_dir(data_dir, gcov_gkv, build)
 
-# NOK
-def kernel_capture_from_dir(dir: Path, gcov_kernel_version: str, $build):
+
+def kernel_capture_from_dir(dir: Path, gcov_kernel_version: int, build: Path):
     """Perform the actual kernel coverage capturing from the specified directory
     assuming that the data was copied from the specified gcov kernel version."""
     global args
 
     # Create package or coverage file
     if args.to_package:
-        create_package(args.to_package, dir, $build, gcov_kernel_version)
+        create_package(args.to_package, dir, build, gcov_kernel_version)
     else:
         # Build directory needs to be passed to geninfo
-        args.base_directory = $build
+        args.base_directory = build
         lcov_geninfo(dir)
 
-# NOK
-def link_data(targetdatadir: Path, targetgraphdir, *, create: bool):
+
+def link_data(targetdatadir: Path, targetgraphdir: Path, *, create: bool):
     # If CREATE is non-zero, create symbolic links in GRAPHDIR for
     # data files found in DATADIR. Otherwise remove link in GRAPHDIR.
 
-    targetdatadir  = abs_path(str(targetdatadir))
-    targetgraphdir = abs_path(targetgraphdir)
+    targetdatadir  = Path(abs_path(str(targetdatadir)))  # NOK
+    targetgraphdir = Path(abs_path(str(targetgraphdir))) # NOK
 
     op_data_cb = link_data_cb if create else unlink_data_cb, 
-    lcov_find(Path(targetdatadir), op_data_cb, Path(targetgraphdir), ["\.gcda$", "\.da$"])
+    lcov_find(targetdatadir, op_data_cb, targetgraphdir, [r"\.gcda$", r"\.da$"])
 
 # NOK
-def link_data_cb($datadir: Path, $rel, $graphdir: Path):
+def link_data_cb(datadir: Path, $rel, graphdir: Path):
     """Create symbolic link in GRAPDIR/REL pointing to DATADIR/REL."""
 
-    $abs_from = catfile(str($datadir),  $rel)
-    $abs_to   = catfile(str($graphdir), $rel)
+    abs_from = datadir/rel
+    abs_to   = graphdir/rel
 
-    if (-e $abs_to):
+    if (-e abs_to):
         die(f"ERROR: could not create symlink at {abs_to}: "
-            "File already exists!\n")
-    if (-l $abs_to):
+            "File already exists!")
+    if (-l abs_to):
         # Broken link - possibly from an interrupted earlier run
-        Path($abs_to).unlink()
+        abs_to.unlink()
 
     # Check for graph file
-    $base = $abs_to;
+    $base = str(abs_to)
     $base =~ s/\.(gcda|da)$//;
     if (! -e $base.".gcno" and ! -e $base.".bbg" and ! -e $base.".bb"):
-        die("ERROR: No graph file found for {} in {}!\n".format(
-            $abs_from, dirname($base)))
+        die("ERROR: No graph file found for {} in {}!".format(
+            abs_from, dirname($base)))
 
     try:
-        symlink($abs_from, $abs_to)
+        symlink(abs_from, abs_to)
     except Exception as exc:
-        or die(f"ERROR: could not create symlink at {abs_to}: {exc}\n")
+        or die(f"ERROR: could not create symlink at {abs_to}: {exc}")
 
 # NOK
-def unlink_data_cb($datadir: Path, $rel, $graphdir: Path):
+def unlink_data_cb(datadir: Path, $rel, graphdir: Path):
     """Remove symbolic link from GRAPHDIR/REL to DATADIR/REL."""
 
-    abs_from = Path(catfile(str($datadir),  $rel))
-    abs_to   = Path(catfile(str($graphdir), $rel))
+    abs_from = datadir/rel
+    abs_to   = graphdir/rel
 
     if (! -l abs_to):
         return
@@ -1018,7 +1017,7 @@ def unlink_data_cb($datadir: Path, $rel, $graphdir: Path):
     try:
         abs_to.unlink()
     except Exception as exc:
-        warn(f"WARNING: could not remove symlink {abs_to}: {exc}!\n")
+        warn(f"WARNING: could not remove symlink {abs_to}: {exc}!")
 
 # NOK
 def find_graph(dir: Path) -> bool:
@@ -1037,14 +1036,13 @@ def find_graph(dir: Path) -> bool:
 
     return count > 0
 
-# NOK
+
 def package_capture():
     """Capture coverage data from a package of unprocessed coverage data files
     as generated by lcov --to-package."""
     global args
 
-    dir: Path, build: Optional[str], $gkv = get_package(args.from_package)
-
+    dir, build, gcov_kernel_version = get_package(args.from_package)
     # Check for build directory
     if args.base_directory is not None:
         if build is not None:
@@ -1052,12 +1050,12 @@ def package_capture():
         build = args.base_directory
 
     # Do the actual capture
-    if $gkv is not None:
-        if $gkv == GKV_SYS:
-            build = adjust_kernel_dir(dir, Path(build) if build is not None else None).to_posix()
+    if gcov_kernel_version is not None:
+        if gcov_kernel_version == GKV_SYS:
+            build = adjust_kernel_dir(dir, build)
         if args.kernel_directory:
             dir = copy_gcov_dir(dir, args.kernel_directory)
-        kernel_capture_from_dir(str($dir), $gkv, build);
+        kernel_capture_from_dir(dir, gcov_kernel_version, build)
     else:
         # Build directory needs to be passed to geninfo
         args.base_directory = build
@@ -1071,22 +1069,19 @@ def package_capture():
             lcov_geninfo(args.base_directory)
             link_data(dir, args.base_directory, create=False)
 
-# NOK
-def info(@)
-    # info(printf_parameter)
-    #
-    # Use printf to write PRINTF_PARAMETER to stdout only when the args.quiet
-    # flag is not set.
+
+def info(format, *pars):
+    """Use printf to write to stdout only when the args.quiet flag
+    is not set."""
     global args
     global data_to_stdout
-
     if args.quiet: return
     # Print info string
-    if not data_to_stdout:
-        printf(*args)
-    else:
+    if data_to_stdout:
         # Don't interfere with the .info output to sys.stdout
-        printf(*args, file=sys.stderr)
+        print(format % pars, end="", file=sys.stderr)
+    else:
+        print(format % pars, end="")
 
 
 def create_temp_dir() -> Path:
@@ -1103,7 +1098,7 @@ def create_temp_dir() -> Path:
         else:
             dir = Path(tempdir(CLEANUP => 1)) # NOK
     except:
-        die("ERROR: cannot create temporary directory\n")
+        die("ERROR: cannot create temporary directory")
 
     temp_dirs.append(dir)
     return dir
@@ -1187,34 +1182,34 @@ def read_info_file($tracefile) -> Dict[str, Dict[str, object]]:
 
     # Check if file exists and is readable
     if not os.access($_[0], os.R_OK):
-        die("ERROR: cannot read file $_[0]!\n")
+        die("ERROR: cannot read file $_[0]!")
     # Check if this is really a plain file
     fstatus = Path($_[0]).stat()
     if ! (-f _):
-        die("ERROR: not a plain file: $_[0]!\n")
+        die("ERROR: not a plain file: $_[0]!")
 
     # Check for .gz extension
     if ($_[0] =~ /\.gz$/):
         # Check for availability of GZIP tool
         system_no_output(1, "gunzip" ,"-h")
-            and die("ERROR: gunzip command not available!\n")
+            and die("ERROR: gunzip command not available!")
 
         # Check integrity of compressed file
         system_no_output(1, "gunzip", "-t", $_[0])
             and die("ERROR: integrity check failed for ".
-                "compressed file $_[0]!\n")
+                "compressed file $_[0]!")
 
         # Open compressed file
         try:
             INFO_HANDLE = open("-|", "gunzip -c '$_[0]'")
         except:
-            or die("ERROR: cannot start gunzip to decompress file $_[0]!\n")
+            die("ERROR: cannot start gunzip to decompress file $_[0]!")
     else:
         # Open decompressed file
         try:
             INFO_HANDLE = open("rt", $_[0])
         except:
-            or die("ERROR: cannot read file $_[0]!\n")
+            die("ERROR: cannot read file $_[0]!")
 
     testname = ""  # Current test name
     with INFO_HANDLE:
@@ -1271,7 +1266,7 @@ def read_info_file($tracefile) -> Dict[str, Dict[str, object]]:
                     line_checksum = $3[1:]
                     # Does it match a previous definition
                     if $1 in $checkdata and $checkdata->{$1} != line_checksum:
-                        die(f"ERROR: checksum mismatch at {filename}:$1\n")
+                        die(f"ERROR: checksum mismatch at {filename}:$1")
                     $checkdata->{$1} = line_checksum
                 continue
 
@@ -1372,11 +1367,11 @@ def read_info_file($tracefile) -> Dict[str, Dict[str, object]]:
             compress_brcount(testbrdata[testname])
 
     if len(result) == 0:
-        die(f"ERROR: no valid records found in tracefile {tracefile}\n")
+        die(f"ERROR: no valid records found in tracefile {tracefile}")
     if negative:
-        warn(f"WARNING: negative counts found in tracefile {tracefile}\n")
+        warn(f"WARNING: negative counts found in tracefile {tracefile}")
     if changed_testname:
-        warn(f"WARNING: invalid characters removed from testname in tracefile {tracefile}\n")
+        warn(f"WARNING: invalid characters removed from testname in tracefile {tracefile}")
 
     return result
 
@@ -1510,7 +1505,7 @@ def merge_func_data(funcdata1: Optional[Dict[object, int]],
     result: Dict[object, int] = funcdata1.copy() if funcdata1 is not None else {}
     for func, line in funcdata2.items():
         if func in result and line != result[func]:
-            warn(f"WARNING: function data mismatch at {filename}:{line}\n")
+            warn(f"WARNING: function data mismatch at {filename}:{line}")
             continue
         result[func] = line
 
@@ -1560,29 +1555,29 @@ def add_testfncdata(testfncdata1: Dict[str, Tuple[Dict[object, int], int, int]],
 
     return result
 
-# NOK
-def brcount_db_combine(db1: Dict, db2: Dict, op: int):
-    # db1 := db1 op db2, where
-    #   db1, db2: brcount data as returned by brcount_to_db
-    #   op:       one of BR_ADD and BR_SUB
 
+def brcount_db_combine(db1: Dict, db2: Dict, op: int):
+    """db1 := db1 op db2, where
+      db1, db2: brcount data as returned by brcount_to_db
+      op:       one of BR_ADD and BR_SUB
+    """
     for line, ldata in db2.items():
         for block, bdata in ldata.items():
            for branch, taken in bdata.items():
-
-                br_count = db1[line][block][branch]
-
-                if !defined(br_count) or br_count == "-":
-                    br_count = taken
+                if (line   not in db1 or
+                    block  not in db1[line] or
+                    branch not in db1[line][block] or
+                    br_count == "-"):
+                    if line  not in db1: db1[line] = {}
+                    if block not in db1[line]: db1[line][block] = {}
+                    db1[line][block][branch] = taken
                 elif taken != "-":
                     if op == BR_ADD:
-                        br_count += taken
+                        db1[line][block][branch] += taken
                     elif op == BR_SUB:
-                        br_count -= taken
-                        if br_count < 0:
-                            br_count = 0
-
-                db1[line][block][branch] = br_count
+                        db1[line][block][branch] -= taken
+                        if db1[line][block][branch] < 0:
+                            db1[line][block][branch] = 0
 
 
 def brcount_db_get_found_and_hit(db: Dict[int, Dict[object, Dict[object, object]]]) -> Tuple[int, int]:
@@ -1610,15 +1605,14 @@ def combine_brcount(brcount1: Dict[int, str],
     brcount_db_combine(db1, db2, op)
     return db_to_brcount(db1, brcount1 if inplace else None)
 
-# NOK
-def brcount_to_db(brcount: Dict[int, str]) -> Dict[int, Dict[???, Dict[???, str]]]:
+
+def brcount_to_db(brcount: Dict[int, str]) -> Dict[int, Dict[???, Dict[???, str]]]: # NOK
     """Convert brcount data to the following format:
      db:          line number    -> block dict
      block  dict: block number   -> branch dict
      branch dict: branch number  -> taken value
     """
-    db: Dict[int, Dict[???, Dict[???, str]]] = {}
-
+    db: Dict[int, Dict[???, Dict[???, str]]] = {} # NOK
     # Add branches to database
     for line, brdata in brcount.items():
         for entry in brdata.split(":"):
@@ -1627,7 +1621,7 @@ def brcount_to_db(brcount: Dict[int, str]) -> Dict[int, Dict[???, Dict[???, str]
                 block  not in db[line] or
                 branch not in db[line][block] or
                 db[line][block][branch] == "-"):
-                if line not in db: db[line] = {}
+                if line  not in db: db[line] = {}
                 if block not in db[line]: db[line][block] = {}
                 db[line][block][branch] = taken
             elif taken != "-":
@@ -1635,8 +1629,8 @@ def brcount_to_db(brcount: Dict[int, str]) -> Dict[int, Dict[???, Dict[???, str]
 
     return db
 
-# NOK
-def db_to_brcount(db: Dict[int, Dict[???, Dict[???, str]]],
+
+def db_to_brcount(db: Dict[int, Dict[???, Dict[???, str]]], # NOK
                   brcount: Optional[Dict[int, str]] = None) -> Tuple[Dict[int, str], int, int]:
     """Convert branch coverage data back to brcount format.
     If brcount is specified, the converted data is directly inserted in brcount.
@@ -1645,12 +1639,12 @@ def db_to_brcount(db: Dict[int, Dict[???, Dict[???, str]]],
     br_found = 0
     br_hit   = 0
     # Convert database back to brcount format
-    for line in sorted({$a <=> $b} db.keys()):
-        ldata: Dict[???, Dict[???, str]] = db[line]
+    for line in sorted({$a <=> $b} db.keys()): # NOK
+        ldata: Dict[???, Dict[???, str]] = db[line] # NOK
         brdata = ""
-        for block in sorted({$a <=> $b} ldata.keys()):
-            bdata: Dict[???, str] = ldata[block]
-            for branch in sorted({$a <=> $b} bdata.keys()):
+        for block in sorted({$a <=> $b} ldata.keys()): # NOK
+            bdata: Dict[???, str] = ldata[block] # NOK
+            for branch in sorted({$a <=> $b} bdata.keys()): # NOK
                 taken = bdata[branch]
                 br_found += 1
                 if taken != "-" and int(taken) > 0:
@@ -1800,7 +1794,7 @@ def add_traces() -> Tuple[int, int, int, int, int, int]:
             with Path(args.output_filename).open("wt") as fhandle:
                 result = write_info_file(fhandle, total_trace)
         except:
-            die(f"ERROR: cannot write to {args.output_filename}!\n")
+            die(f"ERROR: cannot write to {args.output_filename}!")
     else:
         result = write_info_file(sys.stdout, total_trace)
 
@@ -1926,7 +1920,7 @@ def extract() -> Tuple[int, int, int, int, int, int]:
             with Path(args.output_filename).open("wt") as fhandle:
                 result = write_info_file(fhandle, data)
         except:
-            die(f"ERROR: cannot write to {args.output_filename}!\n")
+            die(f"ERROR: cannot write to {args.output_filename}!")
     else:
         result = write_info_file(sys.stdout, data)
 
@@ -1964,7 +1958,7 @@ def remove() -> Tuple[int, int, int, int, int, int]:
             with Path(args.output_filename).open("wt") as fhandle:
                 result = write_info_file(fhandle, data)
         except:
-            die(f"ERROR: cannot write to {args.output_filename}!\n")
+            die(f"ERROR: cannot write to {args.output_filename}!")
     else:
         result = write_info_file(sys.stdout, data)
 
@@ -1987,7 +1981,7 @@ def get_prefix($max_width, $max_long, @path_list):
 
     %prefix = {}
     # Build prefix hash
-    foreach $path (@path_list):
+    for $path in @path_list:
         $v, $d, $f = splitpath($path)
         @dirs  = splitdir($d)
         $p_len = length($path)
@@ -2022,25 +2016,12 @@ def get_prefix($max_width, $max_long, @path_list):
     return ""
 
 # NOK
-def list():
+def listing():
+    """ """
     global options
     global args
 
-    $data: Dict[str, Dict[str, object]] = read_info_file($list)
-
-    my $filename;
-    my $found;
-    my $hit;
-    my $prefix;
-    my $format;
-    my $heading1;
-    my $heading2;
-    my @footer;
-    my $barlen;
-    my $rate;
-    my $fnrate;
-    my $brrate;
-    my $lastpath;
+    data: Dict[str, Dict[str, object]] = read_info_file($list)
 
     F_LN_NUM  = 0
     F_LN_RATE = 1
@@ -2049,119 +2030,110 @@ def list():
     F_BR_NUM  = 4
     F_BR_RATE = 5
 
-    my @fwidth_narrow = (5, 5, 3, 5, 4, 5)
-    my @fwidth_wide   = (6, 5, 5, 5, 6, 5)
+    fwidth_narrow = (5, 5, 3, 5, 4, 5)
+    fwidth_wide   = (6, 5, 5, 5, 6, 5)
 
-    my @fwidth = @fwidth_wide;
-    my $w;
+    fwidth = fwidth_wide
 
-    $max_width = options.list_width
-    $max_long  = options.list_truncate_max
+    max_width = options.list_width
+    max_long  = options.list_truncate_max
 
-    my $fwidth_narrow_length;
-    my $fwidth_wide_length;
-    my $got_prefix = 0;
-    my $root_prefix = 0;
+    got_prefix  = False
+    root_prefix = False
 
     # Calculate total width of narrow fields
-    $fwidth_narrow_length = 0;
-    foreach $w (@fwidth_narrow) {
-        $fwidth_narrow_length += $w + 1;
-    }
+    fwidth_narrow_length = 0
+    for w in fwidth_narrow:
+        fwidth_narrow_length += $w + 1
     # Calculate total width of wide fields
-    $fwidth_wide_length = 0;
-    foreach $w (@fwidth_wide) {
-        $fwidth_wide_length += $w + 1;
-    }
+    fwidth_wide_length = 0
+    for w in fwidth_wide:
+        fwidth_wide_length += $w + 1
     # Get common file path prefix
-    $prefix = get_prefix($max_width - $fwidth_narrow_length, $max_long,
-                 keys(%{$data}));
-    if $prefix == rootdir(): $root_prefix = 1
-    if (length($prefix) > 0):  $got_prefix  = 1
-    $prefix =~ s/\/$//;
+    prefix = get_prefix(max_width - fwidth_narrow_length, max_long, keys(%{$data}))
+    if len(prefix) > 0:     got_prefix  = True
+    if prefix == rootdir(): root_prefix = True
+    prefix =~ s/\/$//; # NOK
 
     # Get longest filename length
-    $strlen = len("Filename")
-    for $filename in (keys(%{$data})):
+    strlen = len("Filename")
+    for filename in (keys(%{$data})):
         if not options.list_full_path:
-            if !$got_prefix or !$root_prefix and !($filename =~ s/^\Q$prefix\/\E//):
-                $v, $d, $f = splitpath($filename)
-                $filename = $f
+            if not got_prefix or not root_prefix and ! (filename =~ s/^\Q{prefix}\/\E//):
+                $v, $d, $f = splitpath(filename)
+                filename = $f
         # Determine maximum length of entries
-        if len($filename) > $strlen:
-            $strlen = len($filename)
+        strlen = max(strlen, len(filename))
 
     if not options.list_full_path:
-        my $blanks;
-
-        $w = $fwidth_wide_length;
+        $w = fwidth_wide_length
         # Check if all columns fit into max_width characters
-        if ($strlen + $fwidth_wide_length > $max_width) {
+        if strlen + fwidth_wide_length > max_width:
             # Use narrow fields
-            @fwidth = @fwidth_narrow;
-            $w = $fwidth_narrow_length;
-            if (($strlen + $fwidth_narrow_length) > $max_width) {
+            fwidth = fwidth_narrow
+            $w = fwidth_narrow_length
+            if strlen + fwidth_narrow_length > max_width:
                 # Truncate filenames at max width
-                $strlen = $max_width - $fwidth_narrow_length;
-            }
-        }
+                strlen = max_width - fwidth_narrow_length
+
         # Add some blanks between filename and fields if possible
-        $blanks = int($strlen * 0.5);
-        $blanks = 4 if ($blanks < 4);
-        $blanks = 8 if ($blanks > 8);
-        if ($strlen + $w + $blanks) < $max_width:
-            $strlen += $blanks;
+        blanks = int(strlen * 0.5)
+        if blanks < 4: blanks = 4
+        if blanks > 8: blanks = 8
+        if strlen + $w + blanks < max_width:
+            strlen += blanks
         else:
-            $strlen = $max_width - $w;
+            strlen = max_width - $w
 
     # Filename
-    w = $strlen;
-    $format   = "%-${w}s|"
-    $heading1 = sprintf("%*s|",  w, "")
-    $heading2 = sprintf("%-*s|", w, "Filename")
-    $barlen   = w + 1
+    w = strlen
+    format   = "%-${w}s|"
+    heading1 = sprintf("%*s|",  w, "")
+    heading2 = sprintf("%-*s|", w, "Filename")
+    barlen   = w + 1
     # Line coverage rate
-    w = $fwidth[$F_LN_RATE]
-    $format   += "%${w}s "
-    $heading1 += sprintf("%-*s |", w + $fwidth[$F_LN_NUM], "Lines")
-    $heading2 += sprintf("%-*s ",  w, "Rate")
-    $barlen   += w + 1
+    w = fwidth[F_LN_RATE]
+    format   += "%${w}s "
+    heading1 += sprintf("%-*s |", w + fwidth[F_LN_NUM], "Lines")
+    heading2 += sprintf("%-*s ",  w, "Rate")
+    barlen   += w + 1
     # Number of lines
-    w = $fwidth[$F_LN_NUM]
-    $format   += "%${w}s|"
-    $heading2 += sprintf("%*s|", w, "Num")
-    $barlen   += w + 1
+    w = fwidth[F_LN_NUM]
+    format   += "%${w}s|"
+    heading2 += sprintf("%*s|", w, "Num")
+    barlen   += w + 1
     # Function coverage rate
-    w = $fwidth[$F_FN_RATE]
-    $format   += "%${w}s "
-    $heading1 += sprintf("%-*s|", w + $fwidth[$F_FN_NUM] + 1, "Functions")
-    $heading2 += sprintf("%-*s ", w, "Rate")
-    $barlen   += w + 1
+    w = fwidth[F_FN_RATE]
+    format   += "%${w}s "
+    heading1 += sprintf("%-*s|", w + fwidth[F_FN_NUM] + 1, "Functions")
+    heading2 += sprintf("%-*s ", w, "Rate")
+    barlen   += w + 1
     # Number of functions
-    w = $fwidth[$F_FN_NUM]
-    $format   += "%${w}s|"
-    $heading2 += sprintf("%*s|", w, "Num")
-    $barlen   += w + 1
+    w = fwidth[F_FN_NUM]
+    format   += "%${w}s|"
+    heading2 += sprintf("%*s|", w, "Num")
+    barlen   += w + 1
     # Branch coverage rate
-    w = $fwidth[$F_BR_RATE]
-    $format   += "%${w}s "
-    $heading1 += sprintf("%-*s",  w + $fwidth[$F_BR_NUM] + 1, "Branches")
-    $heading2 += sprintf("%-*s ", w, "Rate")
-    $barlen   += w + 1
+    w = fwidth[F_BR_RATE]
+    format   += "%${w}s "
+    heading1 += sprintf("%-*s",  w + fwidth[F_BR_NUM] + 1, "Branches")
+    heading2 += sprintf("%-*s ", w, "Rate")
+    barlen   += w + 1
     # Number of branches
-    w = $fwidth[$F_BR_NUM]
-    $format   += "%${w}s"
-    $heading2 += sprintf("%*s", w, "Num")
-    $barlen   += w
+    w = fwidth[F_BR_NUM]
+    format   += "%${w}s"
+    heading2 += sprintf("%*s", w, "Num")
+    barlen   += w
     # Line end
-    $format   += "\n"
-    $heading1 += "\n"
-    $heading2 += "\n"
+    format   += "\n"
+    heading1 += "\n"
+    heading2 += "\n"
 
     # Print heading
-    print($heading1);
-    print($heading2);
-    print(("="x$barlen)."\n");
+    print(heading1)
+    print(heading2)
+    # Print separator
+    print("=" * barlen + "\n")
 
     ln_total_found = 0
     ln_total_hit   = 0
@@ -2171,37 +2143,30 @@ def list():
     br_total_hit   = 0
 
     # Print per file information
-    for $filename in sorted($data.keys()):
+    lastpath = None
+    for filename in sorted($data.keys()):
+        print_filename = filename
 
-        my @file_data;
-        my $print_filename = $filename;
+        entry = $data[filename]
 
-        entry = $data->{$filename};
         if not options.list_full_path:
-        {
-            my $p;
-
-            $print_filename = $filename;
-            if (!$got_prefix or !$root_prefix and
-                !($print_filename =~ s/^\Q$prefix\/\E//)):
-                my ($v, $d, $f) = splitpath($filename);
-
+            if not got_prefix or not root_prefix and ! (print_filename =~ s/^\Q{prefix}\/\E//):
+                $v, $d, $f = splitpath(filename)
                 $p = catpath($v, $d, "");
                 $p =~ s/\/$//;
-                $print_filename = $f;
+                print_filename = $f;
             else:
-                $p = $prefix;
+                $p = prefix
 
-            if (!defined($lastpath) or $lastpath != $p) {
-                print("\n") if (defined($lastpath));
-                $lastpath = $p;
-                print("[$lastpath/]\n") if (!$root_prefix);
-            }
-            $print_filename = shorten_filename($print_filename, $strlen);
-        }
+            if lastpath is None or lastpath != $p:
+                if lastpath is not None: print()
+                lastpath = $p;
+                if not root_prefix:
+                    print(f"[{lastpath}/]")
+            print_filename = shorten_filename(print_filename, strlen)
 
         (_, _, _, _, _, _, _, _,
-         $found,    $hit,
+         ln_found, ln_hit,
          fn_found, fn_hit,
          br_found, br_hit) = get_info_entry(entry)
 
@@ -2215,8 +2180,8 @@ def list():
             br_hit   = 0
 
         # Add line coverage totals
-        ln_total_found += found
-        ln_total_hit   += hit
+        ln_total_found += ln_found
+        ln_total_hit   += ln_hit
         # Add function coverage totals
         fn_total_found += fn_found
         fn_total_hit   += fn_hit
@@ -2225,45 +2190,45 @@ def list():
         br_total_hit   += br_hit
 
         # Determine line coverage rate for this file
-        rate = shorten_rate(hit, found, $fwidth[$F_LN_RATE]);
+        lnrate = shorten_rate(ln_hit, ln_found, fwidth[F_LN_RATE])
         # Determine function coverage rate for this file
-        fnrate = shorten_rate(fn_hit, fn_found, $fwidth[$F_FN_RATE]);
+        fnrate = shorten_rate(fn_hit, fn_found, fwidth[F_FN_RATE])
         # Determine branch coverage rate for this file
-        brrate = shorten_rate(br_hit, br_found, $fwidth[$F_BR_RATE]);
+        brrate = shorten_rate(br_hit, br_found, fwidth[F_BR_RATE])
 
         # Assemble line parameters
-        @file_data.append($print_filename);
-        @file_data.append($rate);
-        @file_data.append(shorten_number(found, $fwidth[$F_LN_NUM]));
-        @file_data.append($fnrate);
-        @file_data.append(shorten_number(fn_found, $fwidth[$F_FN_NUM]));
-        @file_data.append($brrate);
-        @file_data.append(shorten_number(br_found, $fwidth[$F_BR_NUM]));
-
+        file_data = []
+        file_data.append(print_filename)
+        file_data.append(lnrate)
+        file_data.append(shorten_number(ln_found, fwidth[F_LN_NUM]))
+        file_data.append(fnrate)
+        file_data.append(shorten_number(fn_found, fwidth[F_FN_NUM]))
+        file_data.append(brrate)
+        file_data.append(shorten_number(br_found, fwidth[F_BR_NUM]))
         # Print assembled line
-        printf($format, @file_data);
+        print(format % file_data)
 
     # Determine total line coverage rate
-    rate = shorten_rate(ln_total_hit, ln_total_found, $fwidth[$F_LN_RATE]);
+    lnrate = shorten_rate(ln_total_hit, ln_total_found, fwidth[F_LN_RATE])
     # Determine total function coverage rate
-    fnrate = shorten_rate(fn_total_hit, fn_total_found, $fwidth[$F_FN_RATE]);
+    fnrate = shorten_rate(fn_total_hit, fn_total_found, fwidth[F_FN_RATE])
     # Determine total branch coverage rate
-    brrate = shorten_rate(br_total_hit, br_total_found, $fwidth[$F_BR_RATE]);
+    brrate = shorten_rate(br_total_hit, br_total_found, fwidth[F_BR_RATE])
 
     # Print separator
-    print(("="x$barlen)."\n");
+    print("=" * barlen + "\n")
 
     # Assemble line parameters
-    @footer.append(sprintf("%*s", $strlen, "Total:"));
-    @footer.append($rate);
-    @footer.append(shorten_number(ln_total_found, $fwidth[$F_LN_NUM]));
-    @footer.append($fnrate);
-    @footer.append(shorten_number(fn_total_found, $fwidth[$F_FN_NUM]));
-    @footer.append($brrate);
-    @footer.append(shorten_number(br_total_found, $fwidth[$F_BR_NUM]));
-
+    footer = []
+    footer.append(sprintf("%*s", strlen, "Total:"))
+    footer.append(lnrate)
+    footer.append(shorten_number(ln_total_found, fwidth[F_LN_NUM]))
+    footer.append(fnrate)
+    footer.append(shorten_number(fn_total_found, fwidth[F_FN_NUM]))
+    footer.append(brrate)
+    footer.append(shorten_number(br_total_found, fwidth[F_BR_NUM]))
     # Print assembled line
-    printf($format, @footer);
+    printf(format % footer)
 
 
 def shorten_filename(filename: str, width: int) -> str:
@@ -2303,142 +2268,6 @@ def shorten_rate(hit: int, found: int, width: int) -> str:
         return result
     return "#"
 
-# NOK
-def read_diff(diff_file: Path) -> Tuple[Dict, Dict]:
-    # Read diff output from FILENAME to memory. The diff file has to follow the
-    # format generated by 'diff -u'. Returns a list of hash references:
-    #
-    #   (mapping, path mapping)
-    #
-    #   mapping:   filename -> reference to line hash
-    #   line hash: line number in new file -> corresponding line number in old file
-    #
-    #   path mapping:  filename -> old filename
-    #
-    # Die in case of error.
-    global args
-
-    my $mapping;        # Reference to current line hash
-    my $num_old;        # Current line number in old file
-    my $num_new;        # Current line number in new file
-    my $file_old;        # Name of old file in diff section
-    my $file_new;        # Name of new file in diff section
-    my $filename;        # Name of common filename of diff section
-
-    info(f"Reading diff {diff_file}\n")
-
-    # Check if file exists and is readable
-    if not os.access(diff_file, os.R_OK):
-        die(f"ERROR: cannot read file {diff_file}!\n")
-    # Check if this is really a plain file
-    fstatus = diff_file.stat()
-    if ! (-f _):
-        die(f"ERROR: not a plain file: {diff_file}!\n")
-
-    # Check for .gz extension
-    if $diff_file =~ /\.gz$/:
-        # Check for availability of GZIP tool
-        system_no_output(1, "gunzip", "-h")
-            and die("ERROR: gunzip command not available!\n")
-        # Check integrity of compressed file
-        system_no_output(1, "gunzip", "-t", str(diff_file))
-            and die(f"ERROR: integrity check failed for compressed file {diff_file}!\n")
-        # Open compressed file
-        fhandle = open("-|", "gunzip -c 'str(diff_file)'")
-            or die("ERROR: cannot start gunzip to decompress file $_[0]!\n")
-    else:
-        # Open decompressed file
-        try:
-            fhandle = diff_file.open("rt")
-        except:
-            or die("ERROR: cannot read file $_[0]!\n");
-
-    # Parse diff file line by line
-    diff:  Dict = {}  # Resulting mapping filename -> line hash
-    paths: Dict = {}  # Resulting mapping old path -> new path
-    in_block = False
-    with fhandle:
-        for line in fhandle:
-            line = line.rstrip("\n")
-
-            # Filename of old file:
-            # --- <filename> <date>
-            match = re.match(r"^--- (\S+)", line)
-            if match:
-                $file_old = strip_directories($1, args.strip)
-                continue
-
-            # Filename of new file:
-            # +++ <filename> <date>
-            match = re.match(r"^\+\+\+ (\S+)", line)
-            if match:
-                # Add last file to resulting hash
-                if $filename:
-                    diff[filename] = $mapping
-                    $mapping = {}
-                $file_new = strip_directories($1, args.strip)
-                $filename = $file_old;
-                paths[filename] = file_new
-                num_old = 1
-                num_new = 1
-                continue
-
-            # Start of diff block:
-            # @@ -old_start,old_num, +new_start,new_num @@
-            match = re.match(r"^\@\@\s+-(\d+),(\d+)\s+\+(\d+),(\d+)\s+\@\@$", line)
-            if match:
-                in_block = True  # we are inside a diff block
-                while num_old < $1:
-                    $mapping[num_new] = num_old
-                    num_old += 1
-                    num_new += 1
-                continue
-
-            # Unchanged line
-            # <line starts with blank>
-            match = re.match(r"^ ", line)
-            if match:
-                if not in_block: continue
-                $mapping[num_new] = num_old
-                num_old += 1
-                num_new += 1
-                continue
-
-            # Line as seen in old file
-            # <line starts with '-'>
-            match = re.match(r"^-", line)
-            if match:
-                if not in_block: continue
-                num_old += 1
-                continue
-
-            # Line as seen in new file
-            # <line starts with '+'>
-            match = re.match(r"^\+", line)
-            if match:
-                if not in_block: continue
-                num_new += 1
-                continue
-
-            # Empty line
-            match = re.match(r"^$", line)
-            if match:
-                if not in_block: continue
-                $mapping[num_new] = num_old
-                num_old += 1
-                num_new += 1
-                continue
-
-    # Add final diff file section to resulting hash
-    if $filename:
-        diff[filename] = $mapping
-
-    if ! %diff:
-        die(f"ERROR: no valid diff data found in {diff_file}!\n"
-            "Make sure to use 'diff -u' when generating the diff file.\n")
-
-    return (%diff, %paths)
-
 
 def strip_directories(path: str, depth: Optional[int] = None) -> str:
     """Remove depth leading directory levels from path."""
@@ -2446,37 +2275,6 @@ def strip_directories(path: str, depth: Optional[int] = None) -> str:
         for _ in range(depth):
             path = re.sub(r"^[^/]*/+(.*)$", r"\1", path)
     return path
-
-# NOK
-def apply_diff(count_data: Dict[int, object], line_hash: Dict[int, int]) -> Dict[int, object]:
-    """Transform count data using a mapping of lines:
-    
-      count_data: reference to hash: line number -> data
-      line_hash:  reference to hash: line number new -> line number old
-    
-    Return a reference to transformed count data.
-    """
-    result: Dict[int, object] = {}  # Resulting hash
-
-    last_new: int = 0  # Last new line number found in line hash
-    last_old: int = 0  # Last old line number found in line hash
-    # Iterate all new line numbers found in the diff
-    for last_new in sorted({$a <=> $b} line_hash.keys()):
-        last_old = line_hash[last_new]
-        # Is there data associated with the corresponding old line?
-        if last_old in count_data:
-            # Copy data to new hash with a new line number
-            result[last_new] = count_data[last_old]
-
-    # Transform all other lines which come after the last diff entry
-    for line in sorted({$a <=> $b} count_data.keys()):
-        if line <= last_old:
-            # Skip lines which were covered by line hash
-            continue
-        # Copy data to new hash with an offset
-        result[line + (last_new - last_old)] = count_data[line]
-
-    return result
 
 
 def apply_diff_to_brcount(brcount:  Dict[int, str],
@@ -2517,77 +2315,6 @@ def get_dict_max(dict: Dict[int, int]) -> int:
             key_max = key
     return key_max
 
-# NOK
-def get_line_hash(filename, diff_data: Dict, path_data: Dict) -> Optional[Tuple[?, ?, ?]]:
-    # Find line hash in DIFF_DATA which matches FILENAME.
-    # On success, return list line hash. or None in case of no match.
-    # Die if more than one line hashes in DIFF_DATA match.
-
-    my $conversion;
-    my $old_path;
-    my $new_path;
-    my $diff_name;
-    my $common;
-    my $old_depth;
-    my $new_depth;
-
-    # Remove trailing slash from diff path
-    $diff_path =~ s/\/$//;
-
-    for $_ in keys(%{$diff_data}):
-        $sep = ""
-        if ! /^\//: $sep = "/"
-
-        # Try to match diff filename with filename
-        if ($filename =~ /^\Q$diff_path$sep$_\E$/):
-            if $diff_name:
-                # Two files match, choose the more specific one
-                # (the one with more path components)
-                $old_depth = ($diff_name =~ tr/\///);
-                $new_depth = (tr/\///);
-                if $old_depth == $new_depth:
-                    die(f"ERROR: diff file contains ambiguous entries for {filename}\n")
-                elif $new_depth > $old_depth:
-                    $diff_name = $_;
-            else:
-                $diff_name = $_;
-
-    if $diff_name:
-        # Get converted path
-        if $filename =~ /^(.*)$diff_name$/:
-            $common, $old_path, $new_path = get_common_filename($filename,
-                                                                $1 + $path_data->{$diff_name})
-        return ($diff_data->{$diff_name}, $old_path, $new_path)
-    else:
-        return None
-
-# NOK
-def get_common_filename(filename1: str,
-                        filename2: str) -> Optional[Tuple[str, str, str]]
-    """Check for filename components which are common to FILENAME1 and FILENAME2.
-    Upon success, return
-
-      (common, path1, path2)
-
-    or None in case there are no such parts.
-    """
-    # !!! przetestowac zgodnosc z Perlowa wersja !!!
-    parts1 = filename1.split("/")
-    parts2 = filename2.split("/")
-
-    common = []
-    # Work in reverse order, i.e. beginning with the filename itself
-    while parts1 and parts2 and $parts1[$#parts1] == $parts2[$#parts2]:
-        common_part = parts1.pop()
-        parts2.pop()
-        unshift(common, common_part)
-
-    # Did we find any similarities?
-    if common:
-        return ("/".join(common), "/".join(parts1), "/".join(parts2))
-    else:
-        return None
-
 
 def diff() -> Tuple[int, int, int, int, int, int]:
     """ """
@@ -2595,8 +2322,7 @@ def diff() -> Tuple[int, int, int, int, int, int]:
     global data_to_stdout
 
     trace_data: Dict[str, Dict[str, object]] = read_info_file(args.diff)
-
-    diff_data: Dict, path_data: Dict = read_diff(Path($ARGV[0])) # NOK
+    diff_data, path_data = read_diff(Path($ARGV[0])) # NOK
 
     path_conversion_data: Dict[str, str] = {}
     unchanged = 0
@@ -2721,11 +2447,189 @@ def diff() -> Tuple[int, int, int, int, int, int]:
             with Path(args.output_filename).open("wt") as fhandle:
                 result = write_info_file(fhandle, trace_data)
         except:
-            die(f"ERROR: cannot write to {args.output_filename}!\n")
+            die(f"ERROR: cannot write to {args.output_filename}!")
     else:
         result = write_info_file(sys.stdout, trace_data)
 
     return result
+
+# NOK
+def read_diff(diff_file: Path) -> Tuple[Dict[str, Dict[int, int]], Dict[str, str]]:
+    # Read diff output from FILENAME to memory. The diff file has to follow the
+    # format generated by 'diff -u'. Returns a list of hash references:
+    #
+    #   (mapping, path mapping)
+    #
+    #   mapping:   filename -> reference to line hash
+    #   line hash: line number in new file -> corresponding line number in old file
+    #
+    #   path mapping:  filename -> old filename
+    #
+    # Die in case of error.
+    global args
+
+    my $mapping;        # Reference to current line hash
+    my $num_old;        # Current line number in old file
+    my $num_new;        # Current line number in new file
+    my $file_old;        # Name of old file in diff section
+    my $file_new;        # Name of new file in diff section
+
+
+    info(f"Reading diff {diff_file}\n")
+
+    # Check if file exists and is readable
+    if not os.access(diff_file, os.R_OK):
+        die(f"ERROR: cannot read file {diff_file}!")
+    # Check if this is really a plain file
+    fstatus = diff_file.stat()
+    if ! (-f _):
+        die(f"ERROR: not a plain file: {diff_file}!")
+
+    # Check for .gz extension
+    if $diff_file =~ /\.gz$/:
+        # Check for availability of GZIP tool
+        system_no_output(1, "gunzip", "-h")
+            and die("ERROR: gunzip command not available!")
+        # Check integrity of compressed file
+        system_no_output(1, "gunzip", "-t", str(diff_file))
+            and die(f"ERROR: integrity check failed for compressed file {diff_file}!")
+        # Open compressed file
+        fhandle = open("-|", "gunzip -c 'str(diff_file)'")
+            or die("ERROR: cannot start gunzip to decompress file $_[0]!")
+    else:
+        # Open decompressed file
+        try:
+            fhandle = diff_file.open("rt")
+        except:
+            die("ERROR: cannot read file $_[0]!")
+
+    # Parse diff file line by line
+    filename: Optional[str] = None         # Name of common filename of diff section
+    diff:  Dict[str, Dict[int, int]] = {}  # Resulting mapping filename -> line hash
+    paths: Dict[str, str]            = {}  # Resulting mapping old path -> new path
+    in_block = False
+    with fhandle:
+        for line in fhandle:
+            line = line.rstrip("\n")
+
+            # Filename of old file:
+            # --- <filename> <date>
+            match = re.match(r"^--- (\S+)", line)
+            if match:
+                $file_old = strip_directories($1, args.strip)
+                continue
+
+            # Filename of new file:
+            # +++ <filename> <date>
+            match = re.match(r"^\+\+\+ (\S+)", line)
+            if match:
+                # Add last file to resulting hash
+                if filename:
+                    diff[filename] = $mapping
+                    $mapping = {}
+                $file_new = strip_directories($1, args.strip)
+                filename = $file_old;
+                paths[filename] = file_new
+                num_old = 1
+                num_new = 1
+                continue
+
+            # Start of diff block:
+            # @@ -old_start,old_num, +new_start,new_num @@
+            match = re.match(r"^\@\@\s+-(\d+),(\d+)\s+\+(\d+),(\d+)\s+\@\@$", line)
+            if match:
+                in_block = True  # we are inside a diff block
+                while num_old < $1:
+                    $mapping[num_new] = num_old
+                    num_old += 1
+                    num_new += 1
+                continue
+
+            # Unchanged line
+            # <line starts with blank>
+            match = re.match(r"^ ", line)
+            if match:
+                if not in_block: continue
+                $mapping[num_new] = num_old
+                num_old += 1
+                num_new += 1
+                continue
+
+            # Line as seen in old file
+            # <line starts with '-'>
+            match = re.match(r"^-", line)
+            if match:
+                if not in_block: continue
+                num_old += 1
+                continue
+
+            # Line as seen in new file
+            # <line starts with '+'>
+            match = re.match(r"^\+", line)
+            if match:
+                if not in_block: continue
+                num_new += 1
+                continue
+
+            # Empty line
+            match = re.match(r"^$", line)
+            if match:
+                if not in_block: continue
+                $mapping[num_new] = num_old
+                num_old += 1
+                num_new += 1
+                continue
+
+    # Add final diff file section to resulting hash
+    if filename:
+        diff[filename] = $mapping
+
+    if not diff:
+        die(f"ERROR: no valid diff data found in {diff_file}!\n"
+            "Make sure to use 'diff -u' when generating the diff file.")
+
+    return (diff, paths)
+
+# NOK
+def get_line_hash(filename: str,
+                  diff_data: Dict[str, Dict[int, int]],
+                  path_data: Dict[str, str]) -> Optional[Tuple[Dict[int, int], str, str]]:
+    """Find line hash in DIFF_DATA which matches FILENAME.
+    On success, return list line hash. or None in case of no match.
+    Die if more than one line hashes in DIFF_DATA match.
+    """
+    global diff_path
+    # Remove trailing slash from diff path
+    diff_path = re.sub(r"\/$", r"", diff_path)
+
+    diff_name = None
+    for $_ in diff_data.keys():
+        sep = "/" if ! /^\// else ""
+        # Try to match diff filename with filename
+        if re.match(rf"^\Q{diff_path}{sep}{$_}\E$", filename):
+            if diff_name:
+                # Two files match, choose the more specific one
+                # (the one with more path components)
+                $old_depth = (diff_name =~ tr/\///);
+                $new_depth = (tr/\///);
+                if old_depth == new_depth:
+                    die(f"ERROR: diff file contains ambiguous entries for {filename}")
+                elif new_depth > old_depth:
+                    diff_name = $_
+            else:
+                diff_name = $_
+
+    if not diff_name:
+        return None
+
+    my old_path;
+    my new_path;
+    # Get converted path
+    match = re.match(rf"^(.*){diff_name}$", filename)
+    if match:
+        _, old_path, new_path = get_common_filename(filename,
+                                                    match.group(1) + path_data[diff_name])
+    return (diff_data[diff_name], old_path, new_path)
 
 # NOK
 def convert_paths($trace_data, path_conversion_data: Dict[str, str]):
@@ -2738,38 +2642,100 @@ def convert_paths($trace_data, path_conversion_data: Dict[str, str]):
     # Expand path conversion list
     for filename in list(path_conversion_data.keys()):
         new_path = path_conversion_data[filename]
-        while (($filename =~ s/^(.*)\/[^\/]+$/$1/) and
-               ($new_path =~ s/^(.*)\/[^\/]+$/$1/) and
+        while (($filename =~ s/^(.*)\/[^\/]+$/\1/) and
+               ($new_path =~ s/^(.*)\/[^\/]+$/\1/) and
                filename != new_path):
             path_conversion_data[filename] = new_path
 
     # Adjust paths
-    FILENAME:
-    for filename in list($trace_data.keys()):
-        # Find a path in our conversion table that matches, starting
-        # with the longest path
-        for $_ in sorted({length($b) <=> length($a)} path_conversion_data.keys()):
-            # Is this path a prefix of our filename?
-            if ! ($filename =~ /^$_(.*)$/):
-                continue
+    repeat = True
+    while repeat:
+        repeat = False
+        for filename in list($trace_data.keys()):
+            # Find a path in our conversion table that matches, starting
+            # with the longest path
+            for $_ in sorted({length($b) <=> length($a)} path_conversion_data.keys()): # NOK
+                # Is this path a prefix of our filename? Skip if not
+                match = re.match(rf"^$_(.*)$", filename)
+                if not match: continue
 
-            new_path = $path_conversion_data->{$_}.$1;
+                new_path = path_conversion_data[$_] + match.group(1)
 
-            # Make sure not to overwrite an existing entry under
-            # that path name
-            if trace_data[new_path]:
-                # Need to combine entries
-                trace_data[new_path] = combine_info_entries(trace_data[filename],
-                                                            trace_data[new_path],
-                                                            filename)
-            else:
-                # Simply rename entry
-                trace_data[new_path] = trace_data[filename]
+                # Make sure not to overwrite an existing entry under
+                # that path name
+                if trace_data[new_path]:
+                    # Need to combine entries
+                    trace_data[new_path] = combine_info_entries(trace_data[filename],
+                                                                trace_data[new_path],
+                                                                filename)
+                else:
+                    # Simply rename entry
+                    trace_data[new_path] = trace_data[filename]
 
-            del trace_data[filename]
-            next FILENAME;
+                del trace_data[filename]
+                repeat = True
+                break
+            if repeat: break
 
-        info(f"No conversion available for filename {filename}\n")
+            info(f"No conversion available for filename {filename}\n")
+
+
+def apply_diff(count_data: Dict[int, object],
+               line_data: Dict[int, int]) -> Dict[int, object]:
+    """Transform count data using a mapping of lines:
+    
+      count_data: line number -> data
+      line_data:  line number new -> line number old
+    
+    Return a reference to transformed count data.
+    """
+    result: Dict[int, object] = {}  # Resulting hash
+
+    last_new: int = 0  # Last new line number found in line hash
+    last_old: int = 0  # Last old line number found in line hash
+    # Iterate all new line numbers found in the diff
+    for last_new in sorted({$a <=> $b} line_data.keys()): # NOK
+        last_old = line_data[last_new]
+        # Is there data associated with the corresponding old line?
+        if last_old in count_data:
+            # Copy data to new hash with a new line number
+            result[last_new] = count_data[last_old]
+
+    # Transform all other lines which come after the last diff entry
+    for line in sorted({$a <=> $b} count_data.keys()): # NOK
+        # Skip lines which were covered by line hash
+        if line <= last_old: continue
+        # Copy data to new hash with an offset
+        result[line + (last_new - last_old)] = count_data[line]
+
+    return result
+
+# NOK
+def get_common_filename(filename1: str,
+                        filename2: str) -> Optional[Tuple[str, str, str]]
+    """Check for filename components which are common to FILENAME1 and FILENAME2.
+    Upon success, return
+
+      (common, path1, path2)
+
+    or None in case there are no such parts.
+    """
+    # !!! przetestowac zgodnosc z Perlowa wersja !!!
+    parts1 = filename1.split("/")
+    parts2 = filename2.split("/")
+
+    common = []
+    # Work in reverse order, i.e. beginning with the filename itself
+    while parts1 and parts2 and $parts1[$#parts1] == $parts2[$#parts2]:
+        common_part = parts1.pop()
+        parts2.pop()
+        unshift(common, common_part)
+
+    # Did we find any similarities?
+    if common:
+        return ("/".join(common), "/".join(parts1), "/".join(parts2))
+    else:
+        return None
 
 
 def summary() -> Tuple[int, int, int, int, int, int]:
@@ -2910,9 +2876,9 @@ def setup_gkv() -> Tuple[int, Path]:
             setup_gkv_proc()
     else:
         if options.gcov_dir:
-            die(f"ERROR: could not find gcov kernel data at {options.gcov_dir}\n")
+            die(f"ERROR: could not find gcov kernel data at {options.gcov_dir}")
         else:
-            die("ERROR: no gcov kernel data found\n")
+            die("ERROR: no gcov kernel data found")
 
 
 def check_gkv_sys(dir: Path) -> bool:
@@ -3016,12 +2982,14 @@ def main(argv=sys.argv[1:]):
 
     def warn_handler(msg: str):
         global tool_name
-        warn(f"{tool_name}: {msg}")
+        import warnings
+        warnings.warn(f"{tool_name}: {msg}")
 
     def die_handler(msg: str):
         global tool_name
         temp_cleanup()
-        die(f"{tool_name}: {msg}")
+        import sys
+        sys.exit(f"{tool_name}: {msg}")
 
     def abort_handler(msg: str):
         temp_cleanup()

@@ -33,20 +33,20 @@ geninfo
 
 #use strict;
 #use warnings;
-use File::Basename; 
-use File::Spec::Functions qw /abs2rel catdir file_name_is_absolute splitdir
-                  splitpath catpath/;
-use File::Temp qw(tempdir);
-use File::Copy qw(copy);
-use Getopt::Long;
-use Digest::MD5 qw(md5_base64);
-use Cwd qw/abs_path/;
-use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
-use JSON::PP qw(decode_json);
+#use File::Basename; 
+#use File::Spec::Functions qw /abs2rel catdir file_name_is_absolute splitdir
+#                  splitpath catpath/;
+#use File::Temp qw(tempdir);
+#use File::Copy qw(copy);
+#use Getopt::Long;
+#use Digest::MD5 qw(md5_base64);
+#use Cwd qw/abs_path/;
+#use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
+#use JSON::PP qw(decode_json);
 if $^O == "msys":
     require File::Spec::Win32;
 
-from typing import List
+from typing import List, Dict, Optional
 import argparse
 import sys
 import re
@@ -56,7 +56,8 @@ from pathlib import Path
 tool_name    = Path(__file__).stem
 lcov_version = "LCOV version " #+ `${abs_path(dirname($0))}/get_version.sh --full`
 lcov_url     = "http://ltp.sourceforge.net/coverage/lcov.php"
-$gcov_tool    = "gcov"
+
+options.gcov_tool    = "gcov"
 
 GCOV_VERSION_8_0_0 = 0x80000
 GCOV_VERSION_4_7_0 = 0x40700
@@ -146,27 +147,25 @@ BR_VEC_MAX     = vec(pack("b*", 1 x $BR_VEC_WIDTH), 0, BR_VEC_WIDTH)
 UNNAMED_BLOCK = -1
 
 # Prototypes
-from .util import strip_spaces_in_options
-from .util import transform_pattern
 sub print_usage(*);
 sub match_filename($@);
-sub solve_ambiguous_match($$$);
 sub read_gcov_file($);
 sub info(@);
 sub version_to_str($);
 sub system_no_output($@);
-from .util import unique
-from .util import sort_unique
-from .util import sort_unique_lex
-from .util import remove_items_from_dict
-from .util import apply_config
-sub warn_handler($);
-sub die_handler($);
 sub graph_skip(*$;$);
 sub br_gvec_len($);
 sub br_gvec_get($$);
 sub is_external($);
 sub compat_name($);
+from .util import unique
+from .util import sort_unique
+from .util import sort_unique_lex
+from .util import remove_items_from_dict
+from .util import apply_config
+from .util import transform_pattern
+from .util import strip_spaces_in_options
+from .util import warn, die
 
 # Global variables
 gcov_version: int
@@ -175,7 +174,7 @@ our $graph_file_extension;
 our $data_file_extension;
 our @data_directory;
 our $test_name = "";
-our $quiet;
+args.quiet: bool = False  # If set, suppress information messages
 our $help;
 our $output_filename;
 our $base_directory;
@@ -199,12 +198,11 @@ excluded_files: Set[???] = set()  # Files excluded due to include/exclude option
 our $no_recursion = 0;
 our $maxdepth;
 our $no_markers = 0;
-our $opt_derive_func_data = 0;
+options.derive_func_data: bool = False
 opt_external: bool = True
 our $opt_no_external;
 args.debug = False
 gcov_capabilities: Dict = {}
-our @gcov_options;
 internal_dirs: List[str] = []
 our $opt_config_file;
 our $opt_gcov_all_blocks = 1
@@ -217,12 +215,14 @@ our $br_coverage = 0
 our $no_exception_br = 0;
 our $rc_auto_base = 1;
 intermediate = False
-our $rc_intermediate = "auto"
+options.intermediate = "auto"
 opt_excl_line           = "LCOV_EXCL_LINE"
 $excl_br_line           = "LCOV_EXCL_BR_LINE"
 $excl_exception_br_line = "LCOV_EXCL_EXCEPTION_BR_LINE"
 
-$cwd = Path.cwd()  # Current working directory
+gcov_options = []
+
+cwd = Path.cwd()  # Current working directory
 $cwd = `pwd`;
 chomp($cwd);
 
@@ -248,28 +248,28 @@ if $config or %opt_rc:
 
     # Copy configuration file and --rc values to variables
     apply_config({
-        "geninfo_gcov_tool"        => \$gcov_tool,
-        "geninfo_adjust_testname"    => \$adjust_testname,
-        "geninfo_checksum"        => \$checksum,
-        "geninfo_no_checksum"        => \$no_checksum, # deprecated
-        "geninfo_compat_libtool"    => \opt_compat_libtool,
-        "geninfo_external"        => \opt_external,
-        "geninfo_gcov_all_blocks"    => \$opt_gcov_all_blocks,
-        "geninfo_compat"             => \opt_compat,
-        "geninfo_adjust_src_path"    => \$rc_adjust_src_path,
-        "geninfo_auto_base"        => \$rc_auto_base,
-        "geninfo_intermediate"        => \$rc_intermediate,
-        "geninfo_no_exception_branch"    => \$no_exception_br,
-        "lcov_function_coverage"    => \$fn_coverage,
+        "geninfo_gcov_tool"           => \options.gcov_tool,
+        "geninfo_adjust_testname"     => \$adjust_testname,
+        "geninfo_checksum"            => \$checksum,
+        "geninfo_no_checksum"         => \$no_checksum, # deprecated
+        "geninfo_compat_libtool"      => \opt_compat_libtool,
+        "geninfo_external"            => \opt_external,
+        "geninfo_gcov_all_blocks"     => \$opt_gcov_all_blocks,
+        "geninfo_compat"              => \opt_compat,
+        "geninfo_adjust_src_path"     => \$rc_adjust_src_path,
+        "geninfo_auto_base"           => \$rc_auto_base,
+        "geninfo_intermediate"        => \options.intermediate,
+        "geninfo_no_exception_branch" => \$no_exception_br,
+        "lcov_function_coverage"      => \$fn_coverage,
         "lcov_branch_coverage"        => \$br_coverage,
-        "lcov_excl_line"        => \opt_excl_line,
-        "lcov_excl_br_line"        => \$excl_br_line,
-        "lcov_excl_exception_br_line"        => \$excl_exception_br_line,
+        "lcov_excl_line"              => \opt_excl_line,
+        "lcov_excl_br_line"           => \$excl_br_line,
+        "lcov_excl_exception_br_line" => \$excl_exception_br_line,
     });
 
     # Merge options
     if defined($no_checksum):
-        $checksum = ($no_checksum ? 0 : 1);
+        $checksum = (0 if $no_checksum else 1)
         $no_checksum = None
 
     # Check regexp
@@ -280,10 +280,8 @@ if $config or %opt_rc:
         if adjust_src_pattern is None:
             my $msg = $@;
             $msg = $msg.rstrip("\n")
-
             $msg =~ s/at \(eval.*$//;
-            warn("WARNING: invalid pattern in ".
-                 "geninfo_adjust_src_path: $msg\n");
+            warn(f"WARNING: invalid pattern in geninfo_adjust_src_path: $msg")
         elif ! defined($replace):
             # If no replacement is specified, simply remove pattern
             adjust_src_replace = ""
@@ -296,7 +294,7 @@ if $config or %opt_rc:
         chomp($error);
         $error =~ s/at \(eval.*$//;
         if $error:
-            die(f"ERROR: invalid exclude pattern: {error}")
+            die(f"ERROR: invalid exclude pattern: {error}", end="")
 
 # Parse command line options
 if (!GetOptions(
@@ -305,20 +303,20 @@ if (!GetOptions(
         "checksum"            => \$checksum,
         "no-checksum"         => \$no_checksum,
         "base-directory|b=s"  => \$base_directory,
-        "version|v"           =>\$version,
-        "quiet|q"             => \$quiet,
+        "version|v"           => \$version,
+        "quiet|q"             => \args.quiet,
         "help|h|?"            => \$help,
         "follow|f"            => \$follow,
         "compat-libtool"      => \opt_compat_libtool,
         "no-compat-libtool"   => \opt_no_compat_libtool,
-        "gcov-tool=s"         => \$gcov_tool,
+        "gcov-tool=s"         => \options.gcov_tool,
         "ignore-errors=s"     => \@ignore_errors,
         "initial|i"           => \args.initial,
         "include=s"           => \args.include_patterns,
         "exclude=s"           => \args.exclude_patterns,
         "no-recursion"        => \$no_recursion,
         "no-markers"          => \$no_markers,
-        "derive-func-data"    => \$opt_derive_func_data,
+        "derive-func-data"    => \options.derive_func_data,
         "debug"               => \args.debug,
         "external|e"          => \opt_external,
         "no-external"         => \opt_no_external,
@@ -358,51 +356,51 @@ if $version:
     sys.exit(0)
 
 # Check gcov tool
-if system_no_output(3, $gcov_tool, "--help") == -1:
-    die("ERROR: need tool $gcov_tool!\n")
+if system_no_output(3, options.gcov_tool, "--help") == -1:
+    die(f"ERROR: need tool {options.gcov_tool}!")
 
 gcov_version, gcov_version_string = get_gcov_version()
 gcov_capabilities = get_gcov_capabilities()
 
 # Determine intermediate mode
-if $rc_intermediate == "0":
+if  == "0":
     intermediate = False
-elif $rc_intermediate == "1":
+elif options.intermediate == "1":
     intermediate = True
-elif lc($rc_intermediate) == "auto":
+elif options.intermediate.lower() == "auto":
     # Use intermediate format if supported by gcov and not conflicting with
     # exception branch exclusion
     intermediate = ((gcov_capabilities.get('intermediate-format') and !$no_exception_br) or
                     gcov_capabilities.get('json-format'))
 else:
     die("ERROR: invalid value for geninfo_intermediate: "
-        "'$rc_intermediate'\n")
+        r"'{options.intermediate}'")
 
 if intermediate:
-    info("Using intermediate gcov format\n");
-    if $opt_derive_func_data:
+    info("Using intermediate gcov format\n")
+    if options.derive_func_data:
         warn("WARNING: --derive-func-data is not compatible with ".
-             "intermediate format - ignoring\n")
-        $opt_derive_func_data = 0;
+             "intermediate format - ignoring")
+        options.derive_func_data = False
     if $no_exception_br and not gcov_capabilities.get('json-format'):
         die("ERROR: excluding exception branches is not compatible with ".
-            "text intermediate format\n")
+            "text intermediate format")
 
 if $no_exception_br and gcov_version < GCOV_VERSION_3_3_0:
     die("ERROR: excluding exception branches is not compatible with ".
-        "gcov versions older than 3.3\n")
+        "gcov versions older than 3.3")
 
 # Determine gcov options
 if gcov_capabilities.get('branch-probabilities') and ($br_coverage or $fn_coverage):
-    push(@gcov_options, "-b")
+    gcov_options.append("-b")
 if gcov_capabilities.get('branch-counts') and $br_coverage:
-    push(@gcov_options, "-c")
+    gcov_options.append("-c")
 if gcov_capabilities.get('all-blocks') and $opt_gcov_all_blocks and $br_coverage and not intermediate:
-    push(@gcov_options, "-a")
+    gcov_options.append("-a")
 if gcov_capabilities.get('hash-filenames'):
-    push(@gcov_options, "-x");
+    gcov_options.append("-x");
 elif gcov_capabilities.get('preserve-paths'):
-    push(@gcov_options, "-p")
+    gcov_options.append("-p")
 
 # Determine compatibility modes
 parse_compat_modes(opt_compat)
@@ -412,7 +410,7 @@ parse_ignore_errors(@ignore_errors)
 
 # Make sure test names only contain valid characters
 if $test_name =~ s/\W/_/g:
-    warn("WARNING: invalid characters removed from testname!\n")
+    warn("WARNING: invalid characters removed from testname!")
 
 # Adjust test name to include uname output if requested
 if $adjust_testname:
@@ -430,37 +428,36 @@ $follow = "-follow" if $follow else = ""
 $checksum = bool($checksum) if $checksum is not None else False
 
 # Determine max depth for recursion
-$maxdepth = "-maxdepth 1" if ($no_recursion) else ""
+$maxdepth = "-maxdepth 1" if $no_recursion else ""
 
 # Check for directory name
 if ! @data_directory:
     die(f"No directory specified\n"
-        f"Use {tool_name} --help to get usage information\n")
+        f"Use {tool_name} --help to get usage information")
 
 for entry in @data_directory:
     if not os.access(entry, os.R_OK):
-        die(f"ERROR: cannot read {entry}!\n")
+        die(f"ERROR: cannot read {entry}!")
 
-if gcov_version < GCOV_VERSION_3_4_0:
-    if is_compat($COMPAT_MODE_HAMMER):
-        $data_file_extension  = ".da"
-        $graph_file_extension = ".bbg"
-    else:
-        $data_file_extension  = ".da"
-        $graph_file_extension = ".bb"
-else:
+if gcov_version >= GCOV_VERSION_3_4_0:
     $data_file_extension  = ".gcda"
     $graph_file_extension = ".gcno"
+elif is_compat($COMPAT_MODE_HAMMER):
+    $data_file_extension  = ".da"
+    $graph_file_extension = ".bbg"
+else:
+    $data_file_extension  = ".da"
+    $graph_file_extension = ".bb"
 
 # Check output filename
 if defined($output_filename) and $output_filename != "-":
     # Initially create output filename, data is appended
     # for each data file processed
     try:
-        with open($output_filename, "wb"):
+        with Path($output_filename).open("wb"):
             pass
     except:
-        die("ERROR: cannot create {output_filename}!\n")
+        die("ERROR: cannot create {output_filename}!")
 
     # Make $output_filename an absolute path because we're going
     # to change directories while processing files
@@ -468,16 +465,16 @@ if defined($output_filename) and $output_filename != "-":
         $output_filename = $cwd."/".$output_filename;
 
 # Build list of directories to identify external files
-for $entry in (@data_directory + [$base_directory]):
-    if $entry is not None:
-        internal_dirs.append(solve_relative_path(cwd, $entry))
+for entry in (@data_directory + [$base_directory]):
+    if entry is not None:
+        internal_dirs.append(solve_relative_path(cwd, entry))
 
 # Do something
 for entry in @data_directory:
     gen_info(entry)
 
 if args.initial and $br_coverage and not intermediate:
-    warn("Note: --initial does not generate branch coverage data\n")
+    warn("Note: --initial does not generate branch coverage data")
 
 info("Finished .info-file creation\n")
 
@@ -522,35 +519,6 @@ For more information see: {lcov_url}
 """)
 
 # NOK
-def get_common_prefix($min_dir, @files):
-    # get_common_prefix(min_dir, filenames)
-    #
-    # Return the longest path prefix shared by all filenames. MIN_DIR specifies
-    # the minimum number of directories that a filename may have after removing
-    # the prefix.
-
-    my $file;
-    my @prefix;
-    my $i;
-
-    foreach $file (@files) {
-        my ($v, $d, $f) = splitpath($file);
-        my @comp = splitdir($d);
-
-        if (!@prefix) {
-            @prefix = @comp;
-            continue
-        }
-        for ($i = 0; $i < len(@comp) and $i < len(@prefix); $i++):
-            if ($comp[$i] != $prefix[$i] or
-                ((len(@comp) - ($i + 1)) <= $min_dir)):
-                delete(@prefix[$i..len(@prefix)]);
-                break
-    }
-
-    return catdir(@prefix);
-
-# NOK
 def gen_info(directory: str):
     # Traverse DIRECTORY and create a .info file for each data file found.
     # The .info file contains TEST_NAME in the following format:
@@ -584,8 +552,6 @@ def gen_info(directory: str):
     global intermediate
     global excluded_files
 
-    my $file;
-
     if args.initial:
         type = "graph"
         ext  = $graph_file_extension
@@ -593,13 +559,13 @@ def gen_info(directory: str):
         type = "data"
         ext  = $data_file_extension
 
-    my @file_list;
+    @file_list = []
     if (-d $directory):
-        info("Scanning $directory for $ext files ...\n");
+        info(f"Scanning $directory for $ext files ...\n")
         @file_list = `find "$directory" $maxdepth $follow -name \\*$ext -type f -o -name \\*$ext -type l 2>/dev/null`;
         chomp(@file_list);
         if ! @file_list:
-            warn("WARNING: no $ext files found in $directory - skipping!\n");
+            warn("WARNING: no $ext files found in $directory - skipping!")
             return
         prefix = get_common_prefix(1, @file_list)
         info("Found %d %s files in %s\n", $#file_list+1, $type, directory);
@@ -693,7 +659,7 @@ def derive_data($contentdata, $funcdata, $bbdata):
         if $fn == "": continue
         if defined($fn_count{$fn}):
             continue
-        warn("WARNING: no derived data found for function $fn\n");
+        warn("WARNING: no derived data found for function $fn")
 
     # Convert hash to list in @gcov_functions format
     for $fn in sorted(keys(%fn_count)):
@@ -708,7 +674,7 @@ def get_filenames($dirname, $pattern) -> List[str]:
     #
     # Die on error.
     DIR = opendir(dirname)
-        #or die("ERROR: cannot read directory $dirname\n")
+        or die(f"ERROR: cannot read directory {dirname}")
     result = []
     while (directory = readdir(DIR)):
         if directory =~ /$pattern/:
@@ -782,7 +748,7 @@ def process_dafile($da_filename, $dir):
 
         # Check for writable $base_dir (gcov will try to write files there)
         if not os.access($base_dir, os.W_OK):
-            die("ERROR: cannot write to directory $base_dir!\n")
+            die("ERROR: cannot write to directory $base_dir!")
 
         # Construct name of graph file
         $bb_basename = $da_basename.$graph_file_extension;
@@ -797,19 +763,18 @@ def process_dafile($da_filename, $dir):
 
         # Ignore empty graph file (e.g. source file with no statement)
         if (-z $bb_filename):
-            warn("WARNING: empty $bb_filename (skipped)\n");
+            warn("WARNING: empty $bb_filename (skipped)")
             return
 
         # Read contents of graph file into hash. We need it later to find out
         # the absolute path to each .gcov file created as well as for
         # information about functions and their source code positions.
-        if gcov_version < GCOV_VERSION_3_4_0:
-            if is_compat($COMPAT_MODE_HAMMER):
-                instr, graph = read_bbg(Path($bb_filename))
-            else:
-                instr, graph = read_bb(Path($bb_filename))
+        if gcov_version >= GCOV_VERSION_3_4_0:
+            instr, graph = read_gcno(Path($bb_filename))
+        elif is_compat($COMPAT_MODE_HAMMER):
+            instr, graph = read_bbg(Path($bb_filename))
         else:
-            instr, graph = read_gcno($bb_filename)
+            instr, graph = read_bb(Path($bb_filename))
 
         # Try to find base directory automatically if requested by user
         if ($rc_auto_base) {
@@ -841,8 +806,7 @@ def process_dafile($da_filename, $dir):
                 (! -e "$object_dir/$bb_basename")):
             {
                 symlink($bb_filename, "$object_dir/$bb_basename") or
-                    warn("WARNING: cannot create link ".
-                         "$object_dir/$bb_basename\n");
+                    warn("WARNING: cannot create link $object_dir/$bb_basename")
                 push(@tmp_links, "$object_dir/$bb_basename");
             }
 
@@ -856,7 +820,7 @@ def process_dafile($da_filename, $dir):
                 die ("ERROR: cannot rename $da_filename\n")
 
         # Execute gcov command and suppress standard output
-        $gcov_error = system_no_output(1, $gcov_tool, $da_filename,
+        $gcov_error = system_no_output(1, options.gcov_tool, $da_filename,
                                        "-o", $object_dir, @gcov_options)
 
         if da_renamed:
@@ -869,16 +833,16 @@ def process_dafile($da_filename, $dir):
 
         if $gcov_error:
             if ignore[ERROR_GCOV]:
-                warn("WARNING: GCOV failed for $da_filename!\n")
+                warn("WARNING: GCOV failed for $da_filename!")
                 return
-            die("ERROR: GCOV failed for $da_filename!\n")
+            die("ERROR: GCOV failed for $da_filename!")
 
         # Collect data from resulting .gcov files and create .info file
         @gcov_list = get_filenames('.', '\.gcov$')
 
         # Check for files
         if ! @gcov_list:
-            warn("WARNING: gcov did not create any files for $da_filename!\n")
+            warn("WARNING: gcov did not create any files for $da_filename!")
 
         # Check whether we're writing to a single file
         if $output_filename:
@@ -888,13 +852,13 @@ def process_dafile($da_filename, $dir):
             else:
                 # Append to output file
                 INFO_HANDLE = open(">>", $output_filename)
-                    #or die("ERROR: cannot write to $output_filename!\n")
+                    or die("ERROR: cannot write to $output_filename!")
         }
         else
         {
             # Open .info file for output
-            INFO_HANDLE = open(">", "$da_filename.info")
-                #or die("ERROR: cannot create $da_filename.info!\n");
+            INFO_HANDLE = Path("$da_filename.info").open("wt")
+                or die("ERROR: cannot create $da_filename.info!")
         }
 
         # Write test name
@@ -929,9 +893,9 @@ def process_dafile($da_filename, $dir):
             # to pull the emergency brake here.
             if (! -r $source and $checksum):
                 if ignore[ERROR_SOURCE]:
-                    warn("WARNING: could not read source file $source\n")
+                    warn("WARNING: could not read source file $source")
                     continue
-                die("ERROR: could not read source file $source\n")
+                die("ERROR: could not read source file $source")
 
             @matches = match_filename($source, keys(%{$instr}));
 
@@ -939,15 +903,14 @@ def process_dafile($da_filename, $dir):
             if (!@matches):
                 warn("WARNING: cannot find an entry for ".$gcov_file.
                      " in $graph_file_extension file, skipping ".
-                     "file!\n");
+                     "file!")
                 Path($gcov_file).unlink()
                 continue
 
             # Read in contents of gcov file
             @result = read_gcov_file($gcov_file);
             if (!defined($result[0])) {
-                warn("WARNING: skipping unreadable file ".
-                     $gcov_file."\n");
+                warn("WARNING: skipping unreadable file ".$gcov_file)
                 Path($gcov_file).unlink()
                 continue
             }
@@ -956,24 +919,17 @@ def process_dafile($da_filename, $dir):
             @gcov_functions = @{$result[2]};
 
             # Skip empty files
-            if (!@gcov_content)
-            {
-                warn("WARNING: skipping empty file ".$gcov_file."\n");
+            if (!@gcov_content):
+                warn("WARNING: skipping empty file ".$gcov_file)
                 Path($gcov_file).unlink()
                 continue
-            }
 
             if len(@matches) == 1:
-            {
                 # Just one match
                 $source_filename = $matches[0];
-            }
-            else
-            {
+            else:
                 # Try to solve the ambiguity
-                $source_filename = solve_ambiguous_match($gcov_file,
-                            \@matches, \@gcov_content);
-            }
+                $source_filename = solve_ambiguous_match($gcov_file, \@matches, \@gcov_content)
 
             if args.include_patterns:
                 keep = False
@@ -1003,15 +959,13 @@ def process_dafile($da_filename, $dir):
                     continue
 
             # Write absolute path of source file
-            printf(INFO_HANDLE "SF:%s\n", $source_filename);
+            printf(INFO_HANDLE "SF:%s\n", $source_filename)
 
             # If requested, derive function coverage data from
             # line coverage data of the first line of a function
-            if ($opt_derive_func_data) {
-                @gcov_functions =
-                    derive_data(\@gcov_content, \@gcov_functions,
-                            $graph->{$source_filename});
-            }
+            if options.derive_func_data:
+                @gcov_functions = derive_data(\@gcov_content, \@gcov_functions,
+                                              $graph->{$source_filename})
 
             # Write function-related information
             if (defined($graph->{$source_filename}))
@@ -1054,7 +1008,7 @@ def process_dafile($da_filename, $dir):
             #-- FNH: overall count of functions with non-zero call count
             #--
             $funcs_found = 0;
-            $funcs_hit = 0;
+            $funcs_hit   = 0;
             while (@gcov_functions)
             {
                 my $count = shift(@gcov_functions);
@@ -1063,12 +1017,11 @@ def process_dafile($da_filename, $dir):
                 $fn = filter_fn_name($fn)
                 printf(INFO_HANDLE "FNDA:$count,$fn\n");
                 $funcs_found += 1
-                $funcs_hit++ if ($count > 0);
+                if $count > 0: $funcs_hit += 1
             }
-            if ($funcs_found > 0) {
+            if $funcs_found > 0:
                 printf(INFO_HANDLE "FNF:%s\n", $funcs_found);
                 printf(INFO_HANDLE "FNH:%s\n", $funcs_hit);
-            }
 
             # Write coverage information for each instrumented branch:
             #
@@ -1080,12 +1033,13 @@ def process_dafile($da_filename, $dir):
             $br_found = 0;
             $br_hit = 0;
             $num = br_gvec_len($gcov_branches);
-            for ($i = 0; $i < $num; $i++) {
+            for ($i = 0; $i < $num; $i++)
+            {
                 my ($line, $block, $branch, $taken) = br_gvec_get($gcov_branches, $i);
                 if $block < 0: $block = BR_VEC_MAX
                 print(INFO_HANDLE "BRDA:$line,$block,$branch,$taken\n");
                 $br_found += 1
-                $br_hit++ if ($taken != '-' and $taken > 0);
+                if $taken != '-' and $taken > 0: $br_hit += 1
             }
             if ($br_found > 0):
                 printf(INFO_HANDLE "BRF:%s\n", $br_found);
@@ -1134,49 +1088,42 @@ def process_dafile($da_filename, $dir):
             close(INFO_HANDLE);
     finally:
         # Change back to initial directory
-        os.chdir($cwd)
+        os.chdir(cwd)
 
 # NOK
-def match_filename($filename, @list):
+def match_filename($filename, @list) -> List:
     # match_filename(gcov_filename, list)
     #
     # Return a list of those entries of LIST which match the relative filename
     # GCOV_FILENAME.
 
     $vol, $dir, $file = splitpath(filename)
+
+    result = []
+
     @comp = splitdir($dir)
-    $comps = len(@comp)
-
-    my $entry;
-    my @result;
-
+    $comps = len(comp)
     entry:
-    foreach $entry (@list) {
-        my ($evol, $edir, $efile) = splitpath($entry);
-        my @ecomp;
-        my $ecomps;
-        my $i;
+    for entry in @list:
+        $evol, $edir, $efile = splitpath(entry)
 
         # Filename component must match
         if ($efile != $file):
             continue
 
         # Check directory components last to first for match
-        @ecomp = splitdir($edir);
+        @ecomp = splitdir($edir)
         $ecomps = len(@ecomp)
-        if ($ecomps < $comps) {
+        if $ecomps < $comps:
             continue
-        }
-        for ($i = 0; $i < $comps; $i++) {
-            if ($comp[$comps - $i - 1] ne
-                $ecomp[$ecomps - $i - 1]) {
-                next entry;
-            }
-        }
-        push(@result, $entry),
-    }
 
-    return @result;
+        for idx in range($comps):
+            if $comp[- idx - 1] != $ecomp[- idx - 1]:
+                next entry;
+
+        result.append(entry)
+
+    return result
 
 # NOK
 def solve_ambiguous_match($rel_name, $matches, $content):
@@ -1197,7 +1144,7 @@ def solve_ambiguous_match($rel_name, $matches, $content):
         try:
             SOURCE = Path(filename).open("rt")
         except:
-            die(f"ERROR: cannot read {filename}!\n")
+            die(f"ERROR: cannot read {filename}!")
         $no_match = 0;
         with SOURCE:
             for ($index = 2; <SOURCE>; $index += 3):
@@ -1211,10 +1158,10 @@ def solve_ambiguous_match($rel_name, $matches, $content):
                     break
 
         if not $no_match:
-            info("Solved source file ambiguity for $rel_name\n")
+            info(f"Solved source file ambiguity for {rel_name}\n")
             return filename
 
-    die("ERROR: could not match gcov data for $rel_name!\n")
+    die(f"ERROR: could not match gcov data for {rel_name}!")
 
 # NOK
 def split_filename(filename: str) -> Tuple[str, str, str]:
@@ -1244,10 +1191,10 @@ def read_gcov_header(gcov_filename: Path) -> Tuple[Optional[???], Optional[???]]
         fhandle = gcov_filename.open("rt")
     except:
         if $ignore_errors[ERROR_GCOV]:
-            warn(f"WARNING: cannot read {gcov_filename}!\n")
+            warn(f"WARNING: cannot read {gcov_filename}!")
             return (None, None)
         else:
-            die(f"ERROR: cannot read {gcov_filename}!\n")
+            die(f"ERROR: cannot read {gcov_filename}!")
     source = None
     object = None
     with fhandle:
@@ -1358,10 +1305,10 @@ def read_gcov_file($filename) -> Tuple[Optional[???], Optional[???], Optional[??
         INPUT = Path(filename).open("rt")
     except:
         if $ignore_errors[ERROR_GCOV]:
-            warn(f"WARNING: cannot read {filename}!\n")
+            warn(f"WARNING: cannot read {filename}!")
             return (None, None, None)
         else:
-            die(f"ERROR: cannot read {filename}!\n")
+            die(f"ERROR: cannot read {filename}!")
 
     if gcov_version < GCOV_VERSION_3_3_0:
     {
@@ -1420,7 +1367,7 @@ def read_gcov_file($filename) -> Tuple[Optional[???], Optional[???], Optional[??
                     /($EXCL_EXCEPTION_BR_STOP|$EXCL_EXCEPTION_BR_START|$excl_exception_br_line)/) {
                     warn(f"WARNING: $1 found at {filename}:$last_line but "
                          "branch exceptions exclusion is not supported with "
-                         "gcov versions older than 3.3\n")
+                         "gcov versions older than 3.3")
                 }
                 # Source code execution data
                 if (/^\t\t(.*)$/)
@@ -1574,7 +1521,7 @@ def read_gcov_file($filename) -> Tuple[Optional[???], Optional[???], Optional[??
     INPUT.close()
 
     if $exclude_flag or $exclude_br_flag or $exclude_exception_br_flag:
-        warn(f"WARNING: unterminated exclusion section in {filename}\n")
+        warn(f"WARNING: unterminated exclusion section in {filename}")
 
     return (\@result, $branches, \@functions);
 
@@ -1589,7 +1536,7 @@ def read_intermediate_text(gcov_filename: Path, data: Dict[str, str]):
     try:
         fhandle = gcov_filename.open("rt")
     except Exception as exc:
-        die(f"ERROR: Could not read {gcov_filename}: {exc}!\n")
+        die(f"ERROR: Could not read {gcov_filename}: {exc}!")
     with fhandle:
         filename = None
         for line in fhandle:
@@ -1616,11 +1563,11 @@ def read_intermediate_json(gcov_filename: Path, data: Dict[str, object]) -> str:
         my text;
         gunzip(str(gcov_filename), \text)
     except Exception as exc:
-        die(f"ERROR: Could not read {gcov_filename}: $GunzipError\n")
+        die(f"ERROR: Could not read {gcov_filename}: $GunzipError")
 
     json = decode_json(text)
     if json is None or not exists(json["files"]) or ref(json["files"] != "ARRAY"):
-        die(f"ERROR: Unrecognized JSON output format in {gcov_filename}\n")
+        die(f"ERROR: Unrecognized JSON output format in {gcov_filename}")
 
     json_basedir = json["current_working_directory"]
     # Workaround for bug in MSYS GCC 9.x that encodes \ as \n in gcov JSON output
@@ -1694,7 +1641,7 @@ def intermediate_text_to_info($fd, $data, $srcdata):
                 $branch_num = 0;
 
                 $ln_found += 1
-                $ln_hit++ if ($2 > 0);
+                if $2 > 0: $ln_hit += 1
             } elsif ($line =~ /^function:(\d+),(\d+),([^,]+)$/) {
                 if (!$fn_coverage or $excl->{$1}); continue
 
@@ -1703,7 +1650,7 @@ def intermediate_text_to_info($fd, $data, $srcdata):
                 print($fd "FNDA:$2,$3\n");
 
                 $functions_found += 1
-                $functions_hit++ if ($2 > 0);
+                if $2 > 0: $functions_hit += 1
             } elsif ($line =~ /^function:(\d+),\d+,(\d+),([^,]+)$/) {
                 if (!$fn_coverage or $excl->{$1}); continue
 
@@ -1713,7 +1660,7 @@ def intermediate_text_to_info($fd, $data, $srcdata):
                 print($fd "FNDA:$2,$3\n");
 
                 $functions_found += 1
-                $functions_hit++ if ($2 > 0);
+                if $2 > 0: $functions_hit += 1
             } elsif ($line =~ /^branch:(\d+),(taken|nottaken|notexec)/) {
                 if (!$br_coverage or $excl->{$1} or
                     (defined($brexcl->{$1}) and ($brexcl->{$1} == 1))); continue
@@ -1729,7 +1676,7 @@ def intermediate_text_to_info($fd, $data, $srcdata):
                 $branch_num += 1
 
                 $branches_found += 1
-                if $2 == "taken": $branches_hit++
+                if $2 == "taken": $branches_hit += 1
             }
         }
         
@@ -1802,7 +1749,7 @@ def intermediate_json_to_info($fd, $data, $srcdata):
                 print($fd "FNDA:$count,$name\n");
 
                 $functions_found += 1
-                $functions_hit++ if ($count > 0);
+                if ($count > 0): $functions_hit += 1
             }
         }
 
@@ -1834,7 +1781,7 @@ def intermediate_json_to_info($fd, $data, $srcdata):
             print($fd "DA:$line,$count$c\n");
 
             $ln_found += 1
-            $ln_hit++ if ($count > 0);
+            if ($count > 0): $ln_hit += 1
 
             $branch_num = 0;
             # Branch data
@@ -1855,7 +1802,7 @@ def intermediate_json_to_info($fd, $data, $srcdata):
                     }
 
                     $branches_found += 1
-                    $branches_hit++ if ($brcount != "-" and $brcount > 0);
+                    if $brcount != "-" and $brcount > 0: $branches_hit += 1
                     $branch_num += 1
                 }
             }
@@ -1877,17 +1824,17 @@ def get_output_fd($outfile, $file):
         try:
             fhandle = Path(f"{file}.info").open("wt")
         except Exception as exc:
-            die(f"ERROR: Cannot create file {file}.info: {exc}\n")
+            die(f"ERROR: Cannot create file {file}.info: {exc}")
     elif outfile == "-":
         try:
             fhandle = open(">&STDOUT")
         except Exception as exc:
-            die(f"ERROR: Cannot duplicate stdout: {exc}\n")
+            die(f"ERROR: Cannot duplicate stdout: {exc}")
     else:
         try:
             fhandle = Path(outfile).open(">>")
         except Exception as exc:
-            die(f"ERROR: Cannot write to file {outfile}: {exc}\n")
+            die(f"ERROR: Cannot write to file {outfile}: {exc}")
 
     return fhandle
 
@@ -1900,7 +1847,7 @@ def print_gcov_warnings($stderr_file, is_graph: bool, $map):
     try:
         fhandle = Path($stderr_file).open("rt")
     except Exception as exc:
-        warn(f"WARNING: Could not open GCOV stderr file {stderr_file}: {exc}\n")
+        warn(f"WARNING: Could not open GCOV stderr file {stderr_file}: {exc}")
         return
     with fhandle:
         for line in <fhandle>:
@@ -1951,7 +1898,7 @@ def process_intermediate($file, $dir, $tempdir):
             goto err;
 
         # Run gcov on data file
-        $out, $err, $rc = system_no_output(1 + 2 + 4, $gcov_tool,
+        $out, $err, $rc = system_no_output(1 + 2 + 4, options.gcov_tool,
                                            data_file, @gcov_options, "-i")
         if defined($out):
             Path($out).unlink()
@@ -1979,7 +1926,7 @@ def process_intermediate($file, $dir, $tempdir):
             $json_format = 1;
 
         if ! %data:
-            warn(f"WARNING: GCOV did not produce any data for {file}\n")
+            warn(f"WARNING: GCOV did not produce any data for {file}")
             return
 
         # Determine base directory
@@ -2015,15 +1962,15 @@ def process_intermediate($file, $dir, $tempdir):
             else:
                 intermediate_text_to_info(fhandle, \%data, $srcdata);
     finaly:
-        os.chdir($cwd)
+        os.chdir(cwd)
 
     return
 
     err:
     if ignore[ERROR_GCOV]:
-        warn(f"WARNING: {errmsg}!\n")
+        warn(f"WARNING: {errmsg}!")
     else:
-        die(f"ERROR: {errmsg}!\n")
+        die(f"ERROR: {errmsg}!")
 
 
 def map_llvm_version(version: int) -> int:
@@ -2032,7 +1979,7 @@ def map_llvm_version(version: int) -> int:
         return 0x040200
     else:
         warn("WARNING: This version of LLVM's gcov is unknown.  "
-             "Assuming it emulates GCC gcov version 4.2.\n")
+             "Assuming it emulates GCC gcov version 4.2.")
         return 0x040200
 
 
@@ -2065,21 +2012,21 @@ def get_gcov_version() -> Tuple[int, str]:
     #       Default target: x86_64-apple-darwin16.0.0
     #       Host CPU: haswell
     try:
-        GCOV_PIPE = open(, "-|", "$gcov_tool --version")
+        GCOV_PIPE = open(, "-|", f"{options.gcov_tool} --version")
     except:
-        die("ERROR: cannot retrieve gcov version!\n")
+        die("ERROR: cannot retrieve gcov version!")
     local $/;
     with GCOV_PIPE:
         version_string = <GCOV_PIPE>
 
     # Remove all bracketed information
-    version_string =~ s/\([^\)]*\)//g;
+    version_string = re.sub(r"\([^\)]*\)", r"", version_string)
 
-    if version_string =~ /(\d+)\.(\d+)(\.(\d+))?/:
+    if version_string =~ r"(\d+)\.(\d+)(\.(\d+))?":
         $a, $b, $c = ($1, $2, $4)
         if ! defined($c): $c = 0
     else:
-        warn("WARNING: cannot determine gcov version - assuming $a.$b.$c\n")
+        warn("WARNING: cannot determine gcov version - assuming $a.$b.$c")
 
     result = $a << 16 | $b << 8 | $c
 
@@ -2092,21 +2039,19 @@ def get_gcov_version() -> Tuple[int, str]:
 
     return (result, version_string)
 
-# NOK
-def info(printf_parameter):
-    # Use printf to write PRINTF_PARAMETER to stdout only when the $quiet flag
-    # is not set.
 
-    global $quiet
-    if $quiet: return
-
-    global $quiet
+def info(format, *pars):
+    """Use printf to write to stdout only when the args.quiet flag
+    is not set."""
+    global args
+    global output_filename
+    if args.quiet: return
     # Print info string
-    if defined($output_filename) and $output_filename == "-"):
+    if output_filename is not None and output_filename == "-":
         # Don't interfere with the .info output to sys.stdout
-        printf(@_, file=sys.stderr)
+        print(format % pars, end="", file=sys.stderr)
     else:
-        printf(@_)
+        print(format % pars, end="")
 
 # NOK
 def system_no_output($mode, *args):
@@ -2125,44 +2070,41 @@ def system_no_output($mode, *args):
     #    0 on success, non-zero otherwise
 
     # Save old stdout and stderr handles
-    if $mode & 1: OLD_STDOUT = open(">>&", "STDOUT")
-    if $mode & 2: OLD_STDERR = open(">>&", "STDERR")
-
-    if $mode & 4:
+    if mode & 1: prev_stdout = sys.stdout
+    if mode & 2: prev_stderr = sys.stderr
+    if mode & 4:
         # Redirect to temporary files
-        if $mode & 1:
+        if mode & 1:
             $fd, $stdout_file = tempfile(UNLINK => 1)
-            open(STDOUT, ">", $stdout_file)
-                or warn("$!\n");
+            sys.stdout = Path($stdout_file).open("wt")
+                or warn("$!")
             close($fd);
-        if $mode & 2:
+        if mode & 2:
             $fd, $stderr_file = tempfile(UNLINK => 1)
-            open(STDERR, ">", $stderr_file)
-                or warn("$!\n");
+            sys.stderr = Path($stderr_file).open("wt")
+                or warn("$!")
             close($fd);
     else:
         # Redirect to /dev/null
-        if $mode & 1: STDOUT = open(">", "/dev/null")
-        if $mode & 2: STDERR = open(">", "/dev/null")
- 
-    debug("system({}"")\n".format(" ".join(*args)))
-    $result = os.system(*args)
-
-    # Close redirected handles
-    if $mode & 1: close(STDOUT)
-    if $mode & 2: close(STDERR)
-
-    # Restore old handles
-    if $mode & 1: STDOUT = open(">>&", "OLD_STDOUT")
-    if $mode & 2: STDERR = open(">>&", "OLD_STDERR")
-
-    # Remove empty output files
-    if defined($stdout_file) and -z $stdout_file):
-        Path($stdout_file).unlink()
-        $stdout_file = None
-    if defined($stderr_file) and -z $stderr_file):
-        Path($stderr_file).unlink()
-        $stderr_file = None
+        if mode & 1: sys.stdout = open(os.devnull, "wb")
+        if mode & 2: sys.stderr = open(os.devnull, "wb")
+    try:
+        debug("system({}"")\n".format(" ".join(*args)))
+        $result = os.system(*args)
+    finally:
+        # Close redirected handles
+        if mode & 1: close(sys.stdout)
+        if mode & 2: close(sys.stderr)
+        # Restore old handles
+        if mode & 1: sys.stdout = prev_stdout
+        if mode & 2: sys.stderr = prev_stderr
+        # Remove empty output files
+        if $stdout_file is not None and -z $stdout_file):
+            Path($stdout_file).unlink()
+            $stdout_file = None
+        if $stderr_fileis not None and -z $stderr_file):
+            Path($stderr_file).unlink()
+            $stderr_file = None
  
     return ($stdout_file, $stderr_file, $result);
 
@@ -2186,7 +2128,7 @@ def get_source_data($filename):
     try:
         fhandle = Path(filename).open("rt")
     except:
-        warn(f"WARNING: could not open {filename}\n")
+        warn(f"WARNING: could not open {filename}")
         return
     with fhandle:
         while (<fhandle>):
@@ -2221,10 +2163,10 @@ def get_source_data($filename):
                 /($EXCL_EXCEPTION_BR_STOP|$EXCL_EXCEPTION_BR_START|$excl_exception_br_line)/):
                 warn(f"WARNING: $1 found at {filename}:$. but branch exceptions "
                      "exclusion is not supported when using text intermediate "
-                     "format\n")
+                     "format")
 
     if $flag or $brflag or $exceptionbrflag:
-        warn(f"WARNING: unterminated exclusion section in {filename}\n")
+        warn(f"WARNING: unterminated exclusion section in {filename}")
 
     return (\%list, \%brdata, \%checksums);
 
@@ -2248,7 +2190,7 @@ def get_all_source_data(filenames: List[???]) -> Dict[str, ???]:
             failed = True
 
     if failed:
-        warn("WARNING: some exclusion markers may be ignored\n")
+        warn("WARNING: some exclusion markers may be ignored")
 
     return %data
 
@@ -2283,23 +2225,20 @@ def process_graphfile($file, $dir):
         $source_dir =~ s/\.libs$//
 
     # Construct base_dir for current file
-    if $base_directory:
-        $base_dir = $base_directory
-    else:
-        $base_dir = $source_dir
+    $base_dir = $base_directory if $base_directory else $source_dir
 
     # Ignore empty graph file (e.g. source file with no statement)
     if (-z graph_filename):
-        warn(f"WARNING: empty {graph_filename} (skipped)\n")
+        warn(f"WARNING: empty {graph_filename} (skipped)")
         return
 
-    if gcov_version < GCOV_VERSION_3_4_0:
-        if is_compat($COMPAT_MODE_HAMMER):
-            instr, graph = read_bbg(Path(graph_filename))
-        else:
-            instr, graph = read_bb(Path(graph_filename))
+    graph_filepath = Path(graph_filename)
+    if gcov_version >= GCOV_VERSION_3_4_0:
+        instr, graph = read_gcno(graph_filepath)
+    elif is_compat($COMPAT_MODE_HAMMER):
+        instr, graph = read_bbg(graph_filepath)
     else:
-        instr, graph = read_gcno(graph_filename)
+        instr, graph = read_bb(graph_filepath)
 
     # Try to find base directory automatically if requested by user
     if $rc_auto_base:
@@ -2320,60 +2259,50 @@ def process_graphfile($file, $dir):
         else:
             # Append to output file
             INFO_HANDLE = Path($output_filename).open(">>")
-                #or die("ERROR: cannot write to $output_filename!\n")
+                or die("ERROR: cannot write to $output_filename!")
     else:
         # Open .info file for output
-        INFO_HANDLE = Path(f"{graph_filename}.info").open(">")
-            #or die(f"ERROR: cannot create {graph_filename}.info!\n")
+        INFO_HANDLE = Path(f"{graph_filename}.info").open("wt")
+            or die(f"ERROR: cannot create {graph_filename}.info!")
 
     # Write test name
     printf(INFO_HANDLE "TN:%s\n", $test_name);
     for filename in sort(keys(%{$instr})):
-    {
         my $funcdata = $graph->{$filename};
         my $line;
         my $linedata;
 
         # Skip external files if requested
-        if not opt_external:
-            if is_external(filename):
-                info(f"  ignoring data for external file {filename}\n")
-                continue
+        if not opt_external and if is_external(filename):
+            info(f"  ignoring data for external file {filename}\n")
+            continue
 
         print(INFO_HANDLE f"SF:{filename}\n")
 
-        if (defined($funcdata) and $fn_coverage):
-        {
-            my @functions = sort {$funcdata->{$a}->[0] <=>
-                          $funcdata->{$b}->[0]}
-                         keys(%{$funcdata});
-            my $func;
+        if defined($funcdata) and $fn_coverage:
+            my @functions = sorted({$funcdata->{$a}->[0] <=> $funcdata->{$b}->[0]} keys(%{$funcdata}))
 
             # Gather list of instrumented lines and functions
-            foreach $func (@functions) {
+            for $func in @functions:
                 $linedata = $funcdata->{$func};
-
                 # Print function name and starting line
                 print(INFO_HANDLE "FN:".$linedata->[0].",".filter_fn_name($func)."\n");
-            }
             # Print zero function coverage data
-            foreach $func (@functions) {
+            for $func in @functions:
                 print(INFO_HANDLE "FNDA:0,".filter_fn_name($func)."\n");
-            }
             # Print function summary
             print(INFO_HANDLE "FNF:{}\n".format(len(@functions)))
             print(INFO_HANDLE "FNH:0\n");
-        }
+
         # Print zero line coverage data
-        foreach $line (@{$instr->{$filename}}) {
+        foreach $line (@{$instr->{$filename}}):
             print(INFO_HANDLE "DA:$line,0\n");
-        }
         # Print line summary
         print(INFO_HANDLE "LF:{}\n".format(len(@{$instr->{$filename}})));
         print(INFO_HANDLE "LH:0\n");
 
         print(INFO_HANDLE "end_of_record\n");
-    }
+
     if ! ($output_filename and $output_filename == "-"):
         close(INFO_HANDLE);
 
@@ -2394,7 +2323,7 @@ def apply_exclusion_data($instr, $graph):
     $excl_data: Dict[str, ???] = get_all_source_data($graph.keys() + $instr.keys())
 
     # Skip if no markers were found
-    if not %$excl_data:
+    if not $excl_data:
         return ($instr, $graph)
 
     # Apply exclusion marker data to graph
@@ -2472,7 +2401,7 @@ def graph_skip(fhandle, length: int, description: Optional[str] = None) -> bool:
     return graph_read(fhandle, length, description) is not None
 
 # NOK
-def find_base_from_source($base_dir, $source_files):
+def find_base_from_source($base_dir, $source_files) -> str:
     # Try to determine the base directory of the object file built from
     # SOURCE_FILES. The base directory is the base for all relative filenames in
     # the gcov data. It is defined by the current working directory at time
@@ -2484,22 +2413,22 @@ def find_base_from_source($base_dir, $source_files):
     # - the base directory is either BASE_DIR or one of its parent directories
     # - files by the same name are not present in multiple parent directories
 
+    rel_files = set()
+    # Determine list of relative paths
+    for filename in @$source_files:
+        if not file_name_is_absolute(filename):
+            rel_files.add(filename)
+    # Early exit if there are no relative paths
+    if not rel_files:
+        return base_dir
+
     best_miss = None
     best_base = None
 
-    %rel_files = {}
-    # Determine list of relative paths
-    for filename in @$source_files:
-        if file_name_is_absolute(filename): continue
-        $rel_files{filename} = 1
-    # Early exit if there are no relative paths
-    if ! %rel_files:
-        return base_dir
-
     while True:
         miss = 0
-        for filename in (keys(%rel_files)):
-            if (!-e solve_relative_path(Path($base_dir), filename)):
+        for filename in rel_files:
+            if ! -e solve_relative_path(Path($base_dir), filename):
                 miss += 1
 
         debug(f"base_dir={base_dir} miss={miss}\n")
@@ -2743,7 +2672,7 @@ def read_bb(bb_filename: Path):
             elif $value > 0:
                 # Line number
                 if filename is None or !defined($function):
-                    warn("WARNING: unassigned line number $value\n")
+                    warn(f"WARNING: unassigned line number {value}")
                     continue
                 @{$bb->{$function}->{$filename}}.append($value)
                 graph_add_order($fileorder, $function, filename)
@@ -2851,7 +2780,7 @@ def read_bbg(bbg_filename: Path):
                     goto incomplete;
             elif tag == tag_lines:
                 # Read lines record
-                filename = read_bbg_lines_record(fhandle, $bbg_filename,
+                filename = read_bbg_lines_record(fhandle, bbg_filename,
                                                  $bb, $fileorder, filename,
                                                  function)
                 if filename is None:
@@ -2875,11 +2804,8 @@ def read_bbg(bbg_filename: Path):
     return None
 
 # NOK
-def read_bbg_lines_record(fhandle,
-                          $bbg_filename, $bb, $fileorder, $filename, $function) -> Optional[???]:
-    # read_bbg_lines_record(handle, bbg_filename, bb, fileorder, filename,
-    #                       function)
-    #
+def read_bbg_lines_record(fhandle, bbg_filename: Path,
+                          $bb, $fileorder, $filename, $function) -> Optional[???]:
     # Read a bbg format lines record from handle and add the relevant data to
     # bb and fileorder. Return filename on success, None on error.
 
@@ -2911,7 +2837,7 @@ def read_bbg_lines_record(fhandle,
 
         # Got an actual line number
         if filename is None:
-            warn(f"WARNING: unassigned line number in {bbg_filename}\n")
+            warn(f"WARNING: unassigned line number in {bbg_filename}")
             continue
 
         @{$bb->{$function}->{$filename}}.append($lineno)
@@ -2951,7 +2877,7 @@ def read_bbg_word(fhandle,
     return graph_read(fhandle, 4, description)
 
 # NOK
-def read_gcno(gcno_filename: str) -> Optional[Tuple[Any, Any]]
+def read_gcno(gcno_filename: Path) -> Optional[Tuple[Any, Any]]
     # Read the contents of the specified .gcno file and return the following
     # mapping:
     #   graph:    filename -> file_data
@@ -2977,7 +2903,7 @@ def read_gcno(gcno_filename: str) -> Optional[Tuple[Any, Any]]
     artificial_fns: List = []
 
     try:
-        fhandle = Path(gcno_filename).open("rb")
+        fhandle = gcno_filename.open("rb")
     except:
         graph_error(gcno_filename, "could not open file")
         return None
@@ -3027,7 +2953,7 @@ def read_gcno(gcno_filename: str) -> Optional[Tuple[Any, Any]]
             # Catch garbage at the end of a gcno file
             if next_pos > $filelength:
                 debug(f"Overlong record: file_length={filelength} rec_length={length}\n")
-                warn(f"WARNING: {gcno_filename}: Overlong record at end of file!\n")
+                warn(f"WARNING: {gcno_filename}: Overlong record at end of file!")
                 break
 
             # Process record
@@ -3101,9 +3027,6 @@ def read_gcno_function_record(fhandle,
     # to graph. Return (filename, function, artificial) on success, None on error.
 
     global gcno_split_crc
-
-    my $lineno;
-    my $lines;
 
     graph_expect("function record");
     # Skip ident and checksum
@@ -3183,20 +3106,18 @@ def determine_gcno_split_crc(fhandle,
         else:
             # Sanity check
             warn("Found overlong string in function record: "
-                 "try '--compat split_crc'\n")
+                 "try '--compat split_crc'")
 
     return False
 
 # NOK
 def read_gcno_lines_record(fhandle,
-                           $gcno_filename, $bb, $fileorder, $filename, $function, big_endian: bool) -> Optional[???]:
-    # read_gcno_lines_record(handle, gcno_filename, bb, fileorder, filename,
-    #                        function, big_endian)
-    #
-    # Read a gcno format lines record from handle and add the relevant data to
-    # bb and fileorder. Return filename on success, None on error.
-
-    graph_expect("lines record");
+                           gcno_filename: Path, $bb, $fileorder, $filename, $function, big_endian: bool) -> Optional[???]:
+    """
+    Read a gcno format lines record from handle and add the relevant data to
+    bb and fileorder. Return filename on success, None on error.
+    """
+    graph_expect("lines record")
     # Skip basic block index
     if not graph_skip(fhandle, 4, "basic block index"):
         return None
@@ -3221,7 +3142,7 @@ def read_gcno_lines_record(fhandle,
 
         # Got an actual line number
         if filename is None:
-            warn(f"WARNING: unassigned line number in {gcno_filename}\n")
+            warn(f"WARNING: unassigned line number in {gcno_filename}")
             continue
 
         # Add to list
@@ -3276,7 +3197,7 @@ def graph_read(fhandle, length: int, description: Optional[str] = None, *,
         try:
             pos = fhandle.tell()
         except Exception as exc:
-            warn(f"Could not get current file position: {exc}!\n")
+            warn(f"Could not get current file position: {exc}!")
             return None
 
     data = fhandle.read(length)
@@ -3294,7 +3215,7 @@ def graph_read(fhandle, length: int, description: Optional[str] = None, *,
         try:
             fhandle.seek(pos, 0)
         except Exception as exc:
-            warn(f"Could not set file position: {exc}!\n")
+            warn(f"Could not set file position: {exc}!")
             return None
 
     if len(data) != length:
@@ -3309,13 +3230,14 @@ def graph_error(filename: Path, msg: str):
     """
     global ignore
     if ignore[ERROR_GRAPH]:
-        warn(f"WARNING: {filename}: {msg} - skipping\n")
+        warn(f"WARNING: {filename}: {msg} - skipping")
     else:
-        die(f"ERROR: {filename}: {msg}\n")
+        die(f"ERROR: {filename}: {msg}")
 
 
 def map_gcno_version(version: int) ->int:
-    """Map version number as found in .gcno files to the format used in geninfo."""
+    """Map version number as found in .gcno files to the format
+    used in geninfo."""
 
     a = version >> 24
     b = version >> 16 & 0xFF
@@ -3338,7 +3260,7 @@ def get_gcov_capabilities() -> Dict[str, bool]:
     """Determine the list of available gcov options."""
     global gcov_tool
 
-    gcov_help = `$gcov_tool --help` # NOK
+    gcov_help = `options.gcov_tool --help` # NOK
 
     short_option_translations = {
         "a": "all-blocks",
@@ -3377,28 +3299,27 @@ def get_gcov_capabilities() -> Dict[str, bool]:
 
     return capabilities
 
-# NOK
-def parse_ignore_errors(ignore_errors: List)
-    """Parse user input about which errors to ignore."""
-    global ignore
 
-    if not ignore_errors:
-        return
+def parse_ignore_errors(ignore_errors: Optional[List]):
+    """Parse user input about which errors to ignore."""
+    if not ignore_errors: return
+    global ignore
 
     items = []
     for item in ignore_errors:
-        item =~ s/\s//g;
+        item = re.sub(r"\s", r"", item)
         if "," in item:
             # Split and add comma-separated parameters
-            items.append(item.split(","))
+            items += item.split(",")
         else:
             # Add single parameter
             items.append(item)
 
     for item in items:
-        item_id = ERROR_ID.get(lc(item))
-        if item_id is None:
-            die(f"ERROR: unknown argument for --ignore-errors: {item}\n")
+        lc_item = item.lower()
+        if lc_item not in ERROR_ID:
+            die(f"ERROR: unknown argument for --ignore-errors: {item}")
+        item_id = ERROR_ID[lc_item]
         ignore[item_id] = True
 
 
@@ -3438,19 +3359,19 @@ def parse_compat_modes(opt: Optional[str]):
         if not match:
             match = re.match(r"^(\w+)$", directive)
         if not match:
-            die(f"ERROR: Unknown compatibility mode specification: {directive}!\n")
+            die(f"ERROR: Unknown compatibility mode specification: {directive}!")
         mode_gr  = match.group(1)
         value_gr = match.group(2)
         # Determine mode
-        mode: Optional[int] = COMPAT_NAME_TO_MODE.get(lc(mode_gr))
+        mode: Optional[int] = COMPAT_NAME_TO_MODE.get(mode_gr.lower())
         if mode is None:
-            die(f"ERROR: Unknown compatibility mode '{mode_gr}'!\n")
+            die(f"ERROR: Unknown compatibility mode '{mode_gr}'!")
         specified.add(mode)
         # Determine value
         if value_gr is not None:
-            value: Optional[int] = COMPAT_NAME_TO_VALUE.get(lc(value_gr))
+            value: Optional[int] = COMPAT_NAME_TO_VALUE.get(value_gr.lower())
             if value is None:
-                die(f"ERROR: Unknown compatibility mode value '{value_gr}'!\n")
+                die(f"ERROR: Unknown compatibility mode value '{value_gr}'!")
         else:
             value = COMPAT_VALUE_ON
 
@@ -3466,7 +3387,7 @@ def parse_compat_modes(opt: Optional[str]):
         if value == COMPAT_VALUE_AUTO:
             autodetect = COMPAT_MODE_AUTO.get(mode)
             if autodetect is None:
-                die(f"ERROR: No auto-detection for mode '{name}' available!\n")
+                die(f"ERROR: No auto-detection for mode '{name}' available!")
 
             if callable(autodetect):
                 value = autodetect()
@@ -3568,6 +3489,32 @@ def solve_relative_path(path: Path, dir: str) -> str:
     return result
 
 # NOK
+def get_common_prefix($min_dir, @files):
+    # get_common_prefix(min_dir, filenames)
+    #
+    # Return the longest path prefix shared by all filenames. MIN_DIR specifies
+    # the minimum number of directories that a filename may have after removing
+    # the prefix.
+
+    my @prefix;
+    my $i;
+
+    for $file in @files:
+        $v, $d, $f = splitpath($file)
+        @comp = splitdir($d)
+
+        if ! @prefix:
+            @prefix = @comp;
+            continue
+
+        for ($i = 0; $i < len(comp) and $i < len(prefix); $i++):
+            if $comp[$i] != $prefix[$i] or (len(comp) - ($i + 1)) <= $min_dir:
+                delete(@prefix[$i..len(prefix)]);
+                break
+
+    return catdir(@prefix)
+
+# NOK
 def parent_dir(dir):
     """Return parent directory for DIR.
     DIR must not contain relative path components."""
@@ -3587,9 +3534,9 @@ def main(argv=sys.argv[1:]):
     # NOK
     def int_handler()
         # Called when the script was interrupted by an INT signal (e.g. CTRl-C)
-        global $cwd
-        if $cwd:
-            os.chdir($cwd)
+        global cwd
+        if cwd:
+            os.chdir(cwd)
         info("Aborted.\n")
         sys.exit(1)
 
@@ -3600,11 +3547,13 @@ def main(argv=sys.argv[1:]):
 
     def warn_handler(msg: str):
         global tool_name
-        warn(f"{tool_name}: {msg}")
+        import warnings
+        warnings.warn(f"{tool_name}: {msg}")
 
     def die_handler(msg: str):
         global tool_name
-        die(f"{tool_name}: {msg}")
+        import sys
+        sys.exit(f"{tool_name}: {msg}")
 
     # Register handler routine to be called when interrupted
     # $SIG{"INT"}    = int_handler
