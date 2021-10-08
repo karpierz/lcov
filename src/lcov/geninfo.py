@@ -170,8 +170,8 @@ from .util import warn, die
 # Global variables
 gcov_version: int
 gcov_version_string: str
-our $graph_file_extension;
-our $data_file_extension;
+graph_file_extension: str
+data_file_extension:  str
 our @data_directory;
 our $test_name = "";
 args.quiet: bool = False  # If set, suppress information messages
@@ -440,14 +440,14 @@ for entry in @data_directory:
         die(f"ERROR: cannot read {entry}!")
 
 if gcov_version >= GCOV_VERSION_3_4_0:
-    $data_file_extension  = ".gcda"
-    $graph_file_extension = ".gcno"
+    data_file_extension  = ".gcda"
+    graph_file_extension = ".gcno"
 elif is_compat($COMPAT_MODE_HAMMER):
-    $data_file_extension  = ".da"
-    $graph_file_extension = ".bbg"
+    data_file_extension  = ".da"
+    graph_file_extension = ".bbg"
 else:
-    $data_file_extension  = ".da"
-    $graph_file_extension = ".bb"
+    data_file_extension  = ".da"
+    graph_file_extension = ".bb"
 
 # Check output filename
 if defined($output_filename) and $output_filename != "-":
@@ -549,34 +549,35 @@ def gen_info(directory: str):
     #
     # Die on error.
 
+    global graph_file_extension, data_file_extension
     global intermediate
     global excluded_files
 
     if args.initial:
         type = "graph"
-        ext  = $graph_file_extension
+        ext  = graph_file_extension
     else:
         type = "data"
-        ext  = $data_file_extension
+        ext  = data_file_extension
 
-    @file_list = []
+    file_list = []
     if (-d $directory):
         info(f"Scanning $directory for $ext files ...\n")
         @file_list = `find "$directory" $maxdepth $follow -name \\*$ext -type f -o -name \\*$ext -type l 2>/dev/null`;
         chomp(@file_list);
-        if ! @file_list:
-            warn("WARNING: no $ext files found in $directory - skipping!")
+        if not file_list:
+            warn(f"WARNING: no $ext files found in $directory - skipping!")
             return
-        prefix = get_common_prefix(1, @file_list)
-        info("Found %d %s files in %s\n", $#file_list+1, $type, directory);
+        prefix = get_common_prefix(1, file_list)
+        info("Found %d %s files in %s\n", $#file_list+1, $type, directory)
     else:
-        @file_list = [directory]
+        file_list = [directory]
         prefix = ""
 
     tempdir = tempdir(CLEANUP => 1);
 
     # Process all files in list
-    for file in @file_list:
+    for file in file_list:
         # Process file
         if intermediate:
             process_intermediate(file, prefix, tempdir)
@@ -692,6 +693,7 @@ def process_dafile($da_filename, $dir):
     # Die on error.
 
     global cwd
+    global graph_file_extension
     global adjust_src_pattern, adjust_src_replace
     global excluded_files
 
@@ -710,7 +712,6 @@ def process_dafile($da_filename, $dir):
     my @gcov_content;    # Content of a .gcov file
     my $gcov_branches;    # Branch content of a .gcov file
     my @gcov_functions;    # Function calls of a .gcov file
-    my @gcov_list;        # List of generated .gcov files
     my $line_number;    # Line number count
     my $ln_hit;        # Number of instrumented lines hit
     my $ln_found;    # Number of instrumented lines found
@@ -751,7 +752,7 @@ def process_dafile($da_filename, $dir):
             die("ERROR: cannot write to directory $base_dir!")
 
         # Construct name of graph file
-        $bb_basename = $da_basename.$graph_file_extension;
+        $bb_basename = $da_basename + graph_file_extension
         $bb_filename = "$da_dir/$bb_basename";
 
         # Find out the real location of graph file in case we're just looking at
@@ -795,11 +796,11 @@ def process_dafile($da_filename, $dir):
         if $object_dir != $da_dir:
             # Need to create link to data file in $object_dir
             system("ln", "-s", $da_filename, 
-                   "$object_dir/$da_basename$data_file_extension")
-                and die ("ERROR: cannot create link $object_dir/".
-                     "$da_basename$data_file_extension!\n");
+                   f"$object_dir/$da_basename{data_file_extension}")
+                and die(f"ERROR: cannot create link $object_dir/".
+                        f"$da_basename{data_file_extension}!")
             push(@tmp_links,
-                 "$object_dir/$da_basename$data_file_extension");
+                 f"$object_dir/$da_basename{data_file_extension}")
             # Need to create link to graph file if basename of link
             # and file are different (CONFIG_MODVERSION compat)
             if ((basename($bb_filename) != $bb_basename) and
@@ -817,7 +818,7 @@ def process_dafile($da_filename, $dir):
         if da_renamed:
             # Need to rename empty data file to workaround gcov <= 3.2.x bug (Abort)
             if system_no_output(3, "mv", "$da_filename", "$da_filename.ori") != NO_ERROR:
-                die ("ERROR: cannot rename $da_filename\n")
+                die("ERROR: cannot rename $da_filename")
 
         # Execute gcov command and suppress standard output
         $gcov_error = system_no_output(1, options.gcov_tool, $da_filename,
@@ -825,7 +826,7 @@ def process_dafile($da_filename, $dir):
 
         if da_renamed:
             if system_no_output(3, "mv", "$da_filename.ori", "$da_filename") != NO_ERROR:
-                die ("ERROR: cannot rename $da_filename.ori")
+                die("ERROR: cannot rename $da_filename.ori", end="") # !!! chyba bex end=""
 
         # Clean up temporary links
         for $_ in @tmp_links:
@@ -838,10 +839,9 @@ def process_dafile($da_filename, $dir):
             die("ERROR: GCOV failed for $da_filename!")
 
         # Collect data from resulting .gcov files and create .info file
-        @gcov_list = get_filenames('.', '\.gcov$')
-
+        gcov_list = get_filenames('.', '\.gcov$')
         # Check for files
-        if ! @gcov_list:
+        if not gcov_list:
             warn("WARNING: gcov did not create any files for $da_filename!")
 
         # Check whether we're writing to a single file
@@ -866,7 +866,7 @@ def process_dafile($da_filename, $dir):
 
         # Traverse the list of generated .gcov files and combine them into a
         # single .info file
-        foreach $gcov_file (sort(@gcov_list))
+        for $gcov_file in sorted(gcov_list):
         {
             my $i;
             my $num;
@@ -902,7 +902,7 @@ def process_dafile($da_filename, $dir):
             # Skip files that are not mentioned in the graph file
             if (!@matches):
                 warn("WARNING: cannot find an entry for ".$gcov_file.
-                     " in $graph_file_extension file, skipping ".
+                     f" in {graph_file_extension} file, skipping "
                      "file!")
                 Path($gcov_file).unlink()
                 continue
@@ -1597,12 +1597,13 @@ def intermediate_text_to_info($fd, $data, $srcdata):
     #       that appear multiple times for the same lines/branches are not added.
     #       This is done by lcov/genhtml when reading the data files.
 
-    my $branch_num = 0;
     my $c;
 
-    if ! %{$data}: return
+    if not data: return
 
-    print($fd "TN:$test_name\n");
+    print("TN:$test_name", file=$fd)
+
+    branch_num = 0
     for filename in (keys(%{$data})):
     {
         my ($excl, $brexcl, $checksums);
@@ -1638,7 +1639,7 @@ def intermediate_text_to_info($fd, $data, $srcdata):
                 # a) the order of branches is fixed across
                 #    instances
                 # b) an instance starts with an lcount line
-                $branch_num = 0;
+                branch_num = 0
 
                 $ln_found += 1
                 if $2 > 0: $ln_hit += 1
@@ -1673,7 +1674,7 @@ def intermediate_text_to_info($fd, $data, $srcdata):
                 else:
                     $c = "-"
                 print($fd "BRDA:$1,0,$branch_num,$c\n");
-                $branch_num += 1
+                branch_num += 1
 
                 $branches_found += 1
                 if $2 == "taken": $branches_hit += 1
@@ -1710,11 +1711,11 @@ def intermediate_json_to_info($fd, $data, $srcdata):
     #       that appear multiple times for the same lines/branches are not added.
     #       This is done by lcov/genhtml when reading the data files.
 
-    my $branch_num = 0;
+    if not data: return
 
-    if ! %{$data}: return
+    print("TN:$test_name", file=$fd)
 
-    print($fd "TN:$test_name\n");
+    branch_num = 0
     for filename in (keys(%{$data})):
     {
         my ($excl, $brexcl, $checksums);
@@ -1783,7 +1784,7 @@ def intermediate_json_to_info($fd, $data, $srcdata):
             $ln_found += 1
             if ($count > 0): $ln_hit += 1
 
-            $branch_num = 0;
+            branch_num = 0
             # Branch data
             if $br_coverage and (!defined($brexcl->{$line}) or ($brexcl->{$line} != 1)):
             {
@@ -1803,7 +1804,7 @@ def intermediate_json_to_info($fd, $data, $srcdata):
 
                     $branches_found += 1
                     if $brcount != "-" and $brcount > 0: $branches_hit += 1
-                    $branch_num += 1
+                    branch_num += 1
                 }
             }
         }
@@ -1827,7 +1828,7 @@ def get_output_fd($outfile, $file):
             die(f"ERROR: Cannot create file {file}.info: {exc}")
     elif outfile == "-":
         try:
-            fhandle = open(">&STDOUT")
+            fhandle = sys.stdout
         except Exception as exc:
             die(f"ERROR: Cannot duplicate stdout: {exc}")
     else:
@@ -1863,6 +1864,7 @@ def process_intermediate($file, $dir, $tempdir):
     using gcov's intermediate option.
     """
     global cwd
+    global graph_file_extension
 
     my $base;
     my $srcdata;
@@ -1877,12 +1879,12 @@ def process_intermediate($file, $dir, $tempdir):
         $file = solve_relative_path(cwd, $file)
         $fdir, $fbase, $fext = split_filename($file)
 
-        is_graph = ($graph_file_extension == f".{fext}")
+        is_graph = (graph_file_extension == f".{fext}")
 
         if is_graph:
             # Process graph file - copy to temp directory to prevent
             # accidental processing of associated data file
-            data_file = "$tempdir/$fbase$graph_file_extension"
+            data_file = f"$tempdir/$fbase{graph_file_extension}"
             if ! copy($file, data_file):
                 errmsg = f"ERROR: Could not copy file {file}"
                 goto err;
@@ -2106,7 +2108,7 @@ def system_no_output($mode, *args):
             Path($stderr_file).unlink()
             $stderr_file = None
  
-    return ($stdout_file, $stderr_file, $result);
+    return ($stdout_file, $stderr_file, $result)
 
 # NOK
 def get_source_data($filename):

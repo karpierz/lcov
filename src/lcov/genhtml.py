@@ -1951,7 +1951,7 @@ def write_css_file():
     try:
         fhandle = Path("gcov.css").open("wt")
     except:
-        die ("ERROR: cannot open gcov.css for writing!\n")
+        die("ERROR: cannot open gcov.css for writing!")
 
     css_data = ($_=<<"END_OF_CSS") # NOK
     # !!! read from html/genhtml.css

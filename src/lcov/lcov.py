@@ -96,14 +96,14 @@ options.tmp_dir:        Optional[Path] = None  # Where to create temporary direc
 args.directory:         Optional[List] = None  # Specifies where to get coverage data from
 args.kernel_directory:  Optional[List] = None  # If set, captures only from specified kernel subdirs
 args.add_tracefile:     Optional[List] = None  # If set, reads in and combines all files in list
-our $list;        # If set, list contents of tracefile
+args.list:              Optional[str] = None   # If set, list contents of tracefile
 args.extract:           Optional[str] = None   # If set, extracts parts of tracefile
 args.remove:            Optional[str] = None   # If set, removes  parts of tracefile
 args.diff:              Optional[str] = None   # If set, modifies tracefile according to diff
 args.reset:             bool = False           # If set, reset all coverage data to zero
 args.capture:           bool = False           # If set, capture data
 args.output_filename:   Optional[str] = None   # Name for file to write coverage data to
-our $test_name = "";    # Test case name
+args.test_name: str = ""    # Test case name
 args.quiet:             bool = False           # If set, suppress information messages
 our $help;        # Help option flag
 our $version;        # Version option flag
@@ -189,7 +189,7 @@ if $config or args.rc:
 if (!GetOptions(
         "directory|d|di=s"     => \args.directory,
         "add-tracefile|a=s"    => \args.add_tracefile,
-        "list|l=s"             => \$list,
+        "list|l=s"             => \args.list,
         "kernel-directory|k=s" => \args.kernel_directory,
         "extract|e=s"          => \args.extract,
         "remove|r=s"           => \args.remove,
@@ -198,7 +198,7 @@ if (!GetOptions(
         "strip=i"              => \args.strip,
         "capture|c"            => \args.capture,
         "output-file|o=s"      => \args.output_filename,
-        "test-name|t=s"        => \$test_name,
+        "test-name|t=s"        => \args.test_name,
         "zerocounters|z"       => \args.reset,
         "quiet|q"              => \args.quiet,
         "help|h|?"             => \$help,
@@ -322,7 +322,7 @@ elif args.extract is not None:
     (ln_overall_found, ln_overall_hit,
      fn_overall_found, fn_overall_hit,
      br_overall_found, br_overall_hit) = extract()
-elif $list:
+elif args.list:
     data_to_stdout = False
     listing()
 elif args.diff:
@@ -346,7 +346,7 @@ if ln_overall_found is not None:
                        True, fn_overall_found, fn_overall_hit,
                        True, br_overall_found, br_overall_hit)
 else:
-    if ! $list and not args.capture:
+    if not args.list and not args.capture:
         info("Done.\n")
 
 sys.exit($exit_code)
@@ -413,11 +413,10 @@ Options:
 For more information see: $lcov_url
 END_OF_USAGE
 
-# NOK
+
 def check_options():
     """Check for valid combination of command line options.
     Die on error."""
-
     global args
 
     # Count occurrence of mutually exclusive options
@@ -427,7 +426,7 @@ def check_options():
         args.add_tracefile,
         args.extract,
         args.remove,
-        $list,
+        args.list,
         args.diff,
         args.summary,
     )
@@ -441,6 +440,7 @@ def check_options():
         die("ERROR: only one of -z, -c, -a, -e, -r, -l, "
             "--diff or --summary allowed!\n"
             f"Use {tool_name} --help to get usage information")
+
 
 #class LCov:
 
@@ -597,15 +597,12 @@ def lcov_copy_single(path_from: Path, path_to: Path):
     except Exception as exc:
         die(f"ERROR: cannot write {path_to}: {exc}!")
 
-# NOK
-def lcov_geninfo(*dirs):
-    # Call geninfo for the specified directories and with the parameters
-    # specified at the command line.
 
+def lcov_geninfo(*dirs):
+    """Call geninfo for the specified directories and with the parameters
+    specified at the command line."""
     global args
     global tool_dir
-    global opt
-    $test_name
 
     dir_list = [str(dir) for dir in dirs]
 
@@ -615,8 +612,8 @@ def lcov_geninfo(*dirs):
     param = [f"{tool_dir}/geninfo"] + dir_list
     if args.output_filename:
         param += ["--output-filename", str(args.output_filename)]
-    if $test_name:
-        param += ["--test-name", $test_name]
+    if args.test_name:
+        param += ["--test-name", args.test_name]
     if args.follow:
         param += ["--follow"]
     if args.quiet:
@@ -659,8 +656,8 @@ def lcov_geninfo(*dirs):
     for patt in args.exclude_patterns:
         param += ["--exclude", patt]
 
-    os.system(@param)
-        and sys.exit($? >> 8)
+    os.system(@param)         # NOK
+        and sys.exit($? >> 8) # NOK
 
 # NOK
 def get_package(package_file: Path) -> Tuple[Path, Optional[Path], Optional[int]]:
@@ -2022,7 +2019,7 @@ def listing():
     global options
     global args
 
-    data: Dict[str, Dict[str, object]] = read_info_file($list)
+    data: Dict[str, Dict[str, object]] = read_info_file(args.list)
 
     F_LN_NUM  = 0
     F_LN_RATE = 1
