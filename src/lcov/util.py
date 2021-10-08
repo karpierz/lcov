@@ -19,7 +19,7 @@ def unique(iterable: Iterable) -> List:
     """Return list without duplicate entries."""
     result = []
     known  = set()
-    for item iterable:
+    for item in iterable:
         if item not in known:
             known.add(item)
             result.append(item)
@@ -77,7 +77,7 @@ def system_no_output(mode: int, *args) -> int:
     return result
 
 # NOK
-def read_file(filename: Path) -> Optional[str]
+def read_file(filename: Path) -> Optional[str]:
     """Return the contents of the file defined by filename."""
     try:
         return filename.read_text()
@@ -94,18 +94,18 @@ def read_lcov_config_file(config_file: Optional[Path] = None) -> Dict:
     """Read lcov configuration file"""
     if config_file is not None:
         return read_config(config_file)
-    home = os.environ.get("HOME")
-    if home is not None:
-        lcovrc = Path(home)/".lcovrc"
-        if (-r lcovrc)
+    HOME = os.environ.get("HOME")
+    if HOME is not None:
+        lcovrc = Path(HOME)/".lcovrc"
+        if os.access(lcovrc, os.R_OK):
             return read_config(lcovrc)
     lcovrc = Path("/etc/lcovrc")
-    if (-r lcovrc):
+    if os.access(lcovrc, os.R_OK):
         return read_config(lcovrc)
     lcovrc = Path("/usr/local/etc/lcovrc")
-    if (-r lcovrc):
+    if os.access(lcovrc, os.R_OK):
         return read_config(lcovrc)
-     return None
+    return None
 
 
 def read_config(filename: Path) -> Dict[str, object]:
@@ -159,7 +159,7 @@ def apply_config(ref: Dict):
 
 def strip_spaces_in_options(opt_dict: Dict):
     """Remove spaces around options"""
-    return = {key.strip(): value.strip() for key, value in opt_dict.items()}
+    return {key.strip(): value.strip() for key, value in opt_dict.items()}
 
 # NOK
 def transform_pattern(pattern: str) -> str:
@@ -167,25 +167,25 @@ def transform_pattern(pattern: str) -> str:
     Return transformed pattern."""
 
     # Escape special chars
-    pattern =~ s/\\/\\\\/g;
-    pattern =~ s/\//\\\//g;
-    pattern =~ s/\^/\\\^/g;
-    pattern =~ s/\$/\\\$/g;
-    pattern =~ s/\(/\\\(/g;
-    pattern =~ s/\)/\\\)/g;
-    pattern =~ s/\[/\\\[/g;
-    pattern =~ s/\]/\\\]/g;
-    pattern =~ s/\{/\\\{/g;
-    pattern =~ s/\}/\\\}/g;
-    pattern =~ s/\./\\\./g;
-    pattern =~ s/\,/\\\,/g;
-    pattern =~ s/\|/\\\|/g;
-    pattern =~ s/\+/\\\+/g;
-    pattern =~ s/\!/\\\!/g;
+    pattern = re.sub("\\", "\\\\", pattern)
+    pattern = re.sub("\/", "\\\/", pattern)
+    pattern = re.sub("\^", "\\\^", pattern)
+    pattern = re.sub("\$", "\\\$", pattern)
+    pattern = re.sub("\(", "\\\(", pattern)
+    pattern = re.sub("\)", "\\\)", pattern)
+    pattern = re.sub("\[", "\\\[", pattern)
+    pattern = re.sub("\]", "\\\]", pattern)
+    pattern = re.sub("\{", "\\\{", pattern)
+    pattern = re.sub("\}", "\\\}", pattern)
+    pattern = re.sub("\.", "\\\.", pattern)
+    pattern = re.sub("\,", "\\\,", pattern)
+    pattern = re.sub("\|", "\\\|", pattern)
+    pattern = re.sub("\+", "\\\+", pattern)
+    pattern = re.sub("\!", "\\\!", pattern)
 
     # Transform ? => (.) and * => (.*)
-    pattern =~ s/\*/\(\.\*\)/g;
-    pattern =~ s/\?/\(\.\)/g;
+    pattern = re.sub("\*", "\(\.\*\)", pattern)
+    pattern = re.sub("\?", "\(\.\)",   pattern)
 
     return pattern
 
