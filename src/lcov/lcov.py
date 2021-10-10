@@ -105,13 +105,13 @@ args.capture:           bool = False           # If set, capture data
 args.output_filename:   Optional[str] = None   # Name for file to write coverage data to
 args.test_name:         str = ""               # Test case name
 args.quiet:             bool = False           # If set, suppress information messages
-our $help;        # Help option flag
+args.help:              bool = False           # Help option flag
 args.version:           bool = False           # Version option flag
 args.convert_filenames: bool = False           # If set, convert filenames when applying diff
 args.strip:             Optional[int] = None   # If set, strip leading directories when applying diff
 our $temp_dir_name;    # Name of temporary directory
 args.follow:            bool =  False          # If set, indicates that find shall follow links
-our $diff_path = "";    # Path removed from tracefile when applying diff
+args.diff_path:         str = ""               # Path removed from tracefile when applying diff
 options.fail_under_lines: int = 0
 args.base_directory:    Optional[Path] = None  # Base directory (cwd of gcc during compilation)
 args.checksum;        # If set, calculate a checksum for each line
@@ -119,7 +119,7 @@ args.no_checksum:       Optional[bool] = None  # If set, don't calculate a check
 args.compat_libtool:    Optional[bool] = None  # If set, indicates that libtool mode is to be enabled
 args.no_compat_libtool: Optional[bool] = None  # If set, indicates that libtool mode is to be disabled
 args.gcov_tool:         Optional[str] = None
-our opt.ignore_errors;
+args.ignore_errors:     List[str] = []         # Ignore certain error classes during processing
 args.initial:           bool = False
 args.include_patterns:  List[str] = []         # List of source file patterns to include
 args.exclude_patterns:  List[str] = []         # List of source file patterns to exclude
@@ -200,10 +200,10 @@ if (!GetOptions(
         "test-name|t=s"        => \args.test_name,
         "zerocounters|z"       => \args.reset,
         "quiet|q"              => \args.quiet,
-        "help|h|?"             => \$help,
+        "help|h|?"             => \args.help,
         "version|v"            => \args.version,
         "follow|f"             => \args.follow,
-        "path=s"               => \$diff_path,
+        "path=s"               => \args.diff_path,
         "base-directory|b=s"   => \Path(args.base_directory),
         "checksum"             => \args.checksum,
         "no-checksum"          => \args.no_checksum,
@@ -247,7 +247,7 @@ if args.no_external is not None:
     del args.no_external
 
 # Check for help option
-if $help:
+if args.help:
     print_usage(sys.stdout)
     sys.exit(0)
 
@@ -262,7 +262,7 @@ if options.list_width <= 40:
         "larger than 40)")
 
 # Normalize --path text
-$diff_path =~ s/\/$//;
+args.diff_path = re.sub("\/$", "", args.diff_path) # ???
 
 # Check for valid options
 check_options()
@@ -2585,9 +2585,9 @@ def get_line_hash(filename: str,
     On success, return list line hash. or None in case of no match.
     Die if more than one line hashes in DIFF_DATA match.
     """
-    global diff_path
+    global args
     # Remove trailing slash from diff path
-    diff_path = re.sub(r"\/$", r"", diff_path)
+    diff_path = re.sub("\/$", "", args.diff_path) # ???
 
     diff_name = None
     for $_ in diff_data.keys():
@@ -3000,6 +3000,33 @@ def main(argv=sys.argv[1:]):
     # $SIG{__DIE__}  = die_handler
     # $SIG{'INT'}    = abort_handler
     # $SIG{'QUIT'}   = abort_handler
+
+    # Parse command line options
+    parser = argparse.ArgumentParser(prog=tool_name, description=main.__doc__,
+                                     epilog=f"For more information see: {lcov_url}",
+                                     add_help=False)
+    parser.add_argument("filename", type=str,
+        metavar="SOURCEFILE", help="SOURCEFILE")
+    parser.add_argument("-h", "-?", "--help", action="help",
+        help="Print this help, then exit")
+    parser.add_argument("-v", "--version", action="version",
+        version=f"%(prog)s: {lcov_version}",
+        help="Print version number, then exit")
+    parser.add_argument("-t", "--tab-size", type=int, default=4,
+        metavar="TABSIZE", help="Use TABSIZE spaces in place of tab")
+    parser.add_argument("-w", "--width", type=int, default=80,
+        metavar="WIDTH", help="Set width of output image to WIDTH pixel")
+    parser.add_argument("-o", "--output-filename", type=str,
+        metavar="FILENAME", help="Write image to FILENAME")
+
+    args = parser.parse_args(argv)
+    # Check for output filename
+    if not args.output_filename:
+        args.output_filename = f"{args.filename}.png"
+
+    try:
+    except BaseException as exc:
+        return str(exc)
 
 
 if __name__.rpartition(".")[-1] == "__main__":

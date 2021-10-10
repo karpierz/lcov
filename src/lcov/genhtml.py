@@ -166,9 +166,9 @@ from .lcov import BR_ADD
 UNNAMED_BLOCK_MARKER = vec(pack('b*', 1 x 32), 0, 32)
 
 # Error classes which users may specify to ignore during processing
-our $ERROR_SOURCE    = 0;
+ERROR_SOURCE = 0
 ERROR_ID = {
-    "source" => $ERROR_SOURCE,
+    "source": ERROR_SOURCE,
 }
 
 # Data related prototypes
@@ -197,7 +197,7 @@ our $base_filename;    # Optional name of file containing baseline data
 our $desc_filename;    # Name of file containing test descriptions
 options.css_filename: Optional[Path] = None  # Optional name of external stylesheet file to use
 args.quiet: bool = False  # If set, suppress information messages
-our $help;        # Help option flag
+args.help:  bool = False  # Help option flag
 our $version;        # Version option flag
 options.show_details: bool = False  # If set, generate detailed directory view
 options.no_prefix:    bool = False  # If set, do not remove filename prefix
@@ -223,7 +223,7 @@ options.html_gzip: bool = False    # Compress with gzip
 options.demangle_cpp = False  # Demangle C++ function names
 options.demangle_cpp_tool:   str = "c++filt"  # Default demangler for C++ function names
 options.demangle_cpp_params: str = ""         # Extra parameters for demangling
-our @opt_ignore_errors;    # Ignore certain error classes during processing
+args.ignore_errors:     List[str] = []    # Ignore certain error classes during processing
 our @ignore;
 our $opt_config_file;    # User-specified configuration file location
 our %opt_rc;
@@ -324,7 +324,7 @@ if (!GetOptions(
         "highlight"            => \options.highlight,
         "legend"               => \$legend,
         "quiet|q"              => \args.quiet,
-        "help|h|?"             => \$help,
+        "help|h|?"             => \args.help,
         "version|v"            => \$version,
         "html-prolog=s"        => \Path(options.html_prolog_file),
         "html-epilog=s"        => \Path(options.html_epilog_file),
@@ -337,7 +337,7 @@ if (!GetOptions(
         "sort"                 => \options.sort,
         "no-sort"              => \options.no_sort,
         "demangle-cpp"         => \options.demangle_cpp,
-        "ignore-errors=s"      => \@opt_ignore_errors,
+        "ignore-errors=s"      => \args.ignore_errors,
         "config-file=s"        => \$opt_config_file,
         "rc=s%"                => \%opt_rc,
         "precision=i"          => \$default_precision,
@@ -358,7 +358,7 @@ if options.no_sort:
 info_filenames = @ARGV;
 
 # Check for help option
-if $help:
+if args.help:
     print_usage(sys.stdout)
     sys.exit(0)
 
@@ -368,7 +368,7 @@ if $version:
     sys.exit(0)
 
 # Determine which errors the user wants us to ignore
-parse_ignore_errors(@opt_ignore_errors)
+parse_ignore_errors(args.ignore_errors, ignore)
 
 # Split the list of prefixes if needed
 parse_dir_prefix(@opt_dir_prefix)
@@ -2757,6 +2757,8 @@ def write_source(html_handle,
 
     Die on error.
     """
+    global ignore
+
     count_data = count_data or {}
 
     #datafunc = reverse_dict(funcdata)  # unused
@@ -2764,7 +2766,7 @@ def write_source(html_handle,
     try:
         SOURCE_HANDLE = source_filename.open("rt")
     except:
-        if not $ignore[$ERROR_SOURCE]:
+        if not $ignore[ERROR_SOURCE]:
             die(f"ERROR: cannot read {source_filename}")
 
         # Continue without source file
@@ -3345,10 +3347,9 @@ def get_fn_list(info: Dict[???, ???]) -> List[???]: # NOK
     return list(fns)
 
 
-def parse_ignore_errors(ignore_errors: Optional[List]):
+def parse_ignore_errors(ignore_errors: Optional[List], ignore: Dict):
     """Parse user input about which errors to ignore."""
     if not ignore_errors: return
-    global ignore
 
     items = []
     for item in ignore_errors:

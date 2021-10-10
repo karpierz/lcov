@@ -42,7 +42,6 @@ geninfo
 #use Digest::MD5 qw(md5_base64);
 #use Cwd qw/abs_path/;
 #use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
-#use JSON::PP qw(decode_json);
 if $^O == "msys":
     require File::Spec::Win32;
 
@@ -52,12 +51,19 @@ import sys
 import re
 from pathlib import Path
 
+from .util import unique
+from .util import sort_unique
+from .util import sort_unique_lex
+from .util import remove_items_from_dict
+from .util import apply_config
+from .util import transform_pattern
+from .util import strip_spaces_in_options
+from .util import warn, die
+
 # Constants
 tool_name    = Path(__file__).stem
 lcov_version = "LCOV version " #+ `${abs_path(dirname($0))}/get_version.sh --full`
 lcov_url     = "http://ltp.sourceforge.net/coverage/lcov.php"
-
-options.gcov_tool    = "gcov"
 
 GCOV_VERSION_8_0_0 = 0x80000
 GCOV_VERSION_4_7_0 = 0x40700
@@ -146,24 +152,8 @@ BR_VEC_MAX     = vec(pack("b*", 1 x $BR_VEC_WIDTH), 0, BR_VEC_WIDTH)
 
 UNNAMED_BLOCK = -1
 
-# Prototypes
-sub match_filename($@);
-sub read_gcov_file($);
-sub version_to_str($);
-sub system_no_output($@);
-sub graph_skip(*$;$);
-sub is_external($);
-sub compat_name($);
-from .util import unique
-from .util import sort_unique
-from .util import sort_unique_lex
-from .util import remove_items_from_dict
-from .util import apply_config
-from .util import transform_pattern
-from .util import strip_spaces_in_options
-from .util import warn, die
-
 # Global variables
+options.gcov_tool: str = "gcov"
 gcov_version: int
 gcov_version_string: str
 graph_file_extension: str
@@ -171,50 +161,49 @@ data_file_extension:  str
 our @data_directory;
 our $test_name = "";
 args.quiet: bool = False  # If set, suppress information messages
-our $help;
+args.help:  bool = False  # Help option flag
 our $output_filename;
 our $base_directory;
 our $version;
-our $follow;
+args.follow: bool = False
 our $checksum;
 our $no_checksum;
-opt_compat_libtool:    Optional[bool] = None
-opt_no_compat_libtool: Optional[bool] = None
+options.compat_libtool: Optional[bool] = None
+args.no_compat_libtool: Optional[bool] = None
 our $rc_adjust_src_path;# Regexp specifying parts to remove from source path
 adjust_src_pattern: Optional[???] = None
 adjust_src_replace: Optional[???] = None
-our $adjust_testname;
+options.adjust_testname: bool = False
 our $config;        # Configuration file contents
-our @ignore_errors;    # List of errors to ignore (parameter)
+args.ignore_errors:    List[str] = []  # List of errors to ignore (parameter)
 our @ignore;        # List of errors to ignore (array)
 args.initial = False
 args.include_patterns: List[str] = []  # List of source file patterns to include
 args.exclude_patterns: List[str] = []  # List of source file patterns to exclude
 excluded_files: Set[???] = set()  # Files excluded due to include/exclude options
-our $no_recursion = 0;
-our $maxdepth;
-our $no_markers = 0;
+args.no_recursion: bool = False
+args.no_markers:   bool = False
 options.derive_func_data: bool = False
-opt_external: bool = True
+options.external: bool = True
 our $opt_no_external;
 args.debug = False
-gcov_capabilities: Dict = {}
+gcov_capabilities: Set[str] = set()
 internal_dirs: List[str] = []
 our $opt_config_file;
 our $opt_gcov_all_blocks = 1
 opt_compat: Optional[str] = None
 our %opt_rc;
-our %compat_value;
+compat_value: Dict[int, int] = {}
 gcno_split_crc: Optional[bool] = None
 our $fn_coverage = 1
 our $br_coverage = 0
-our $no_exception_br = 0;
+options.no_exception_br: bool = False
 our $rc_auto_base = 1;
 intermediate = False
 options.intermediate = "auto"
-opt_excl_line           = "LCOV_EXCL_LINE"
-$excl_br_line           = "LCOV_EXCL_BR_LINE"
-$excl_exception_br_line = "LCOV_EXCL_EXCEPTION_BR_LINE"
+options.excl_line:              str = "LCOV_EXCL_LINE"
+options.excl_br_line:           str = "LCOV_EXCL_BR_LINE"
+options.excl_exception_br_line: str = "LCOV_EXCL_EXCEPTION_BR_LINE"
 
 gcov_options = []
 
@@ -245,22 +234,22 @@ if $config or %opt_rc:
     # Copy configuration file and --rc values to variables
     apply_config({
         "geninfo_gcov_tool"           => \options.gcov_tool,
-        "geninfo_adjust_testname"     => \$adjust_testname,
+        "geninfo_adjust_testname"     => \options.adjust_testname,
         "geninfo_checksum"            => \$checksum,
         "geninfo_no_checksum"         => \$no_checksum, # deprecated
-        "geninfo_compat_libtool"      => \opt_compat_libtool,
-        "geninfo_external"            => \opt_external,
+        "geninfo_compat_libtool"      => \options.compat_libtool,
+        "geninfo_external"            => \options.external,
         "geninfo_gcov_all_blocks"     => \$opt_gcov_all_blocks,
         "geninfo_compat"              => \opt_compat,
         "geninfo_adjust_src_path"     => \$rc_adjust_src_path,
         "geninfo_auto_base"           => \$rc_auto_base,
         "geninfo_intermediate"        => \options.intermediate,
-        "geninfo_no_exception_branch" => \$no_exception_br,
+        "geninfo_no_exception_branch" => \options.no_exception_br,
         "lcov_function_coverage"      => \$fn_coverage,
         "lcov_branch_coverage"        => \$br_coverage,
-        "lcov_excl_line"              => \opt_excl_line,
-        "lcov_excl_br_line"           => \$excl_br_line,
-        "lcov_excl_exception_br_line" => \$excl_exception_br_line,
+        "lcov_excl_line"              => \options.excl_line,
+        "lcov_excl_br_line"           => \options.excl_br_line,
+        "lcov_excl_exception_br_line" => \options.excl_exception_br_line,
     });
 
     # Merge options
@@ -284,7 +273,7 @@ if $config or %opt_rc:
         else:
             adjust_src_replace = $replace
 
-    for my $regexp in (opt_excl_line, $excl_br_line, $excl_exception_br_line):
+    for my $regexp in (options.excl_line, options.excl_br_line, options.excl_exception_br_line):
         eval 'qr/'.$regexp.'/';
         my $error = $@;
         chomp($error);
@@ -301,20 +290,20 @@ if (!GetOptions(
         "base-directory|b=s"  => \$base_directory,
         "version|v"           => \$version,
         "quiet|q"             => \args.quiet,
-        "help|h|?"            => \$help,
-        "follow|f"            => \$follow,
-        "compat-libtool"      => \opt_compat_libtool,
-        "no-compat-libtool"   => \opt_no_compat_libtool,
+        "help|h|?"            => \args.help,
+        "follow|f"            => \args.follow,
+        "compat-libtool"      => \options.compat_libtool,
+        "no-compat-libtool"   => \args.no_compat_libtool,
         "gcov-tool=s"         => \options.gcov_tool,
-        "ignore-errors=s"     => \@ignore_errors,
+        "ignore-errors=s"     => \args.ignore_errors,
         "initial|i"           => \args.initial,
         "include=s"           => \args.include_patterns,
         "exclude=s"           => \args.exclude_patterns,
-        "no-recursion"        => \$no_recursion,
-        "no-markers"          => \$no_markers,
+        "no-recursion"        => \args.no_recursion,
+        "no-markers"          => \args.no_markers,
         "derive-func-data"    => \options.derive_func_data,
         "debug"               => \args.debug,
-        "external|e"          => \opt_external,
+        "external|e"          => \options.external,
         "no-external"         => \opt_no_external,
         "compat=s"            => \opt_compat,
         "config-file=s"       => \$opt_config_file,
@@ -326,10 +315,10 @@ if (!GetOptions(
 # Merge options
 if $no_checksum is not None:
     $checksum = not $no_checksum
-if opt_no_compat_libtool is not None:
-    opt_compat_libtool = not opt_no_compat_libtool
+if args.no_compat_libtool is not None:
+    options.compat_libtool = not args.no_compat_libtool
 if $opt_no_external is not None:
-    opt_external = False
+    options.external = False
 if args.include_patterns:
     # Need perlreg expressions instead of shell pattern
     args.include_patterns = [transform_pattern(elem) for elem in args.include_patterns]
@@ -342,7 +331,7 @@ if args.exclude_patterns:
 debug(f"{lcov_version}\n")
 
 # Check for help option
-if $help:
+if args.help:
     print_usage(sys.stdout)
     sys.exit(0)
 
@@ -366,8 +355,8 @@ elif options.intermediate == "1":
 elif options.intermediate.lower() == "auto":
     # Use intermediate format if supported by gcov and not conflicting with
     # exception branch exclusion
-    intermediate = ((gcov_capabilities.get('intermediate-format') and !$no_exception_br) or
-                    gcov_capabilities.get('json-format'))
+    intermediate = (("intermediate-format" in gcov_capabilities and not options.no_exception_br) or
+                    "json-format" in gcov_capabilities)
 else:
     die("ERROR: invalid value for geninfo_intermediate: "
         r"'{options.intermediate}'")
@@ -378,38 +367,37 @@ if intermediate:
         warn("WARNING: --derive-func-data is not compatible with ".
              "intermediate format - ignoring")
         options.derive_func_data = False
-    if $no_exception_br and not gcov_capabilities.get('json-format'):
+    if options.no_exception_br and "json-format" not in gcov_capabilities:
         die("ERROR: excluding exception branches is not compatible with ".
             "text intermediate format")
 
-if $no_exception_br and gcov_version < GCOV_VERSION_3_3_0:
+if options.no_exception_br and gcov_version < GCOV_VERSION_3_3_0:
     die("ERROR: excluding exception branches is not compatible with ".
         "gcov versions older than 3.3")
 
 # Determine gcov options
-if gcov_capabilities.get('branch-probabilities') and ($br_coverage or $fn_coverage):
+if "branch-probabilities" in gcov_capabilities and ($br_coverage or $fn_coverage):
     gcov_options.append("-b")
-if gcov_capabilities.get('branch-counts') and $br_coverage:
+if "branch-counts" in gcov_capabilities and $br_coverage:
     gcov_options.append("-c")
-if gcov_capabilities.get('all-blocks') and $opt_gcov_all_blocks and $br_coverage and not intermediate:
+if "all-blocks" in gcov_capabilities and $opt_gcov_all_blocks and $br_coverage and not intermediate:
     gcov_options.append("-a")
-if gcov_capabilities.get('hash-filenames'):
+if "hash-filenames" in gcov_capabilities:
     gcov_options.append("-x");
-elif gcov_capabilities.get('preserve-paths'):
+elif "preserve-paths" in gcov_capabilities:
     gcov_options.append("-p")
 
 # Determine compatibility modes
-parse_compat_modes(opt_compat)
-
+parse_compat_modes(opt_compat, compat_value)
 # Determine which errors the user wants us to ignore
-parse_ignore_errors(@ignore_errors)
+parse_ignore_errors(args.ignore_errors, ignore)
 
 # Make sure test names only contain valid characters
 if $test_name =~ s/\W/_/g:
     warn("WARNING: invalid characters removed from testname!")
 
 # Adjust test name to include uname output if requested
-if $adjust_testname:
+if options.adjust_testname:
     $test_name += "__".`uname -a`;
     $test_name =~ s/\W/_/g;
 
@@ -417,14 +405,8 @@ if $adjust_testname:
 if $base_directory:
     $base_directory = solve_relative_path(cwd, $base_directory)
 
-# Check for follow option
-$follow = "-follow" if $follow else = ""
-
 # Determine checksum mode (default is off)
 $checksum = bool($checksum) if $checksum is not None else False
-
-# Determine max depth for recursion
-$maxdepth = "-maxdepth 1" if $no_recursion else ""
 
 # Check for directory name
 if ! @data_directory:
@@ -542,9 +524,13 @@ def gen_info(directory: str):
     #
     # Die on error.
 
+    global args
     global graph_file_extension, data_file_extension
     global intermediate
     global excluded_files
+
+    maxdepth = "-maxdepth 1" if args.no_recursion else ""
+    follow   = "-follow"     if args.follow       else ""
 
     if args.initial:
         type = "graph"
@@ -658,8 +644,10 @@ def process_dafile(da_filename: Path, $dir):
 
     Die on error.
     """
-
+    global options
+    global args
     global cwd
+    global ignore
     global graph_file_extension
     global adjust_src_pattern, adjust_src_replace
     global excluded_files
@@ -869,7 +857,7 @@ def process_dafile(da_filename: Path, $dir):
                 continue
 
             # Read in contents of gcov file
-            @result = read_gcov_file($gcov_file);
+            @result = read_gcov_file(Path($gcov_file))
             if ! defined($result[0]):
                 warn("WARNING: skipping unreadable file ".$gcov_file)
                 Path($gcov_file).unlink()
@@ -913,7 +901,7 @@ def process_dafile(da_filename: Path, $dir):
                     continue
 
             # Skip external files if requested
-            if not opt_external:
+            if not options.external:
                 if is_external($source_filename):
                     info("  ignoring data for external file $source_filename")
                     Path($gcov_file).unlink()
@@ -944,7 +932,8 @@ def process_dafile(da_filename: Path, $dir):
                     if $fn == "": continue
 
                     # Remove excluded functions
-                    if (!$no_markers) {
+                    if not args.no_markers:
+                    {
                         my $gfn;
                         my $found = 0;
                         foreach $gfn (@gcov_functions):
@@ -1234,176 +1223,160 @@ def read_gcov_header(gcov_filename: Path) -> Tuple[Optional[???], Optional[???]]
     return (source, object)
 
 # NOK
-def read_gcov_file($filename) -> Tuple[Optional[???], Optional[???], Optional[???]]:
-    # read_gcov_file(gcov_filename)
-    #
-    # Parse file GCOV_FILENAME (.gcov file format) and return the list:
-    # (reference to gcov_content, reference to gcov_branch, reference to gcov_func)
-    #
-    # gcov_content is a list of 3 elements
-    # (flag, count, source) for each source code line:
-    #
-    # $result[($line_number-1)*3+0] = instrumentation flag for line $line_number
-    # $result[($line_number-1)*3+1] = execution count for line $line_number
-    # $result[($line_number-1)*3+2] = source code text for line $line_number
-    #
-    # gcov_branch is a vector of 4 4-byte long elements for each branch:
-    # line number, block number, branch number, count + 1 or 0
-    #
-    # gcov_func is a list of 2 elements
-    # (number of calls, function name) for each function
-    #
-    # Die on error.
+def read_gcov_file(gcov_filename: Path) -> Tuple[Optional[???], Optional[???], Optional[???]]:
+    """Parse file GCOV_FILENAME (.gcov file format) and return the list:
+    (reference to gcov_content, reference to gcov_branch, reference to gcov_func)
+    
+    gcov_content is a list of 3 elements
+    (flag, count, source) for each source code line:
+    
+    $result[($line_number-1)*3+0] = instrumentation flag for line $line_number
+    $result[($line_number-1)*3+1] = execution count for line $line_number
+    $result[($line_number-1)*3+2] = source code text for line $line_number
+    
+    gcov_branch is a vector of 4 4-byte long elements for each branch:
+    line number, block number, branch number, count + 1 or 0
+    
+    gcov_func is a list of 2 elements
+    (number of calls, function name) for each function
+    
+    Die on error.
+    """
+    global options
+    global args
 
-    my @result = ();
+    @result = ();
 
-    my $branches = "";
+    my $branches  = "";
     my @functions = ();
+
     my $number;
-    my $exclude_flag = 0;
-    my $exclude_line = 0;
-    my $exclude_br_flag           = 0;
-    my $exclude_exception_br_flag = 0;
-    my $exclude_branch            = 0;
-    my $exclude_exception_branch  = 0;
+
+    $exclude_flag              = 0
+    $exclude_line              = 0
+    $exclude_br_flag           = 0
+    $exclude_exception_br_flag = 0
+    $exclude_branch            = 0
+    $exclude_exception_branch  = 0
 
     try:
-        INPUT = Path(filename).open("rt")
+        INPUT = gcov_filename.open("rt")
     except:
         if $ignore_errors[ERROR_GCOV]:
-            warn(f"WARNING: cannot read {filename}!")
+            warn(f"WARNING: cannot read {gcov_filename}!")
             return (None, None, None)
         else:
-            die(f"ERROR: cannot read {filename}!")
+            die(f"ERROR: cannot read {gcov_filename}!")
     last_line  = 0
     last_block = $UNNAMED_BLOCK
     with INPUT:
         if gcov_version < GCOV_VERSION_3_3_0:
-        {
             # Expect gcov format as used in gcc < 3.3
             while (<INPUT>)
-            {
                 $_ = $_.rstrip("\n")
 
                 # Also remove CR from line-end
                 s/\015$//;
 
-                if (/^branch\s+(\d+)\s+taken\s+=\s+(\d+)/) {
+                if (/^branch\s+(\d+)\s+taken\s+=\s+(\d+)/):
                     if (!$br_coverage);   continue
                     if ($exclude_line);   continue
                     if ($exclude_branch); continue
                     $branches = br_gvec_push($branches, last_line, last_block, $1, $2)
-                } elsif (/^branch\s+(\d+)\s+never\s+executed/) {
+                elif (/^branch\s+(\d+)\s+never\s+executed/):
                     if (!$br_coverage);   continue
                     if ($exclude_line);   continue
                     if ($exclude_branch); continue
                     $branches = br_gvec_push($branches, last_line, last_block, $1, '-')
-                }
                 elif (/^call/ or /^function/):
                     pass # Function call return data
                 else:
-                {
                     last_line += 1
                     # Check for exclusion markers
-                    if (!$no_markers) {
+                    if not args.no_markers:
                         if (/$EXCL_STOP/) {
                             $exclude_flag = 0;
-                        } elsif (/$EXCL_START/) {
+                        elif (/$EXCL_START/):
                             $exclude_flag = 1;
-                        }
-                        if (/$opt_excl_line/ or $exclude_flag):
+
+                        if (/$options.excl_line/ or $exclude_flag):
                             $exclude_line = 1;
                         else:
                             $exclude_line = 0;
-                    }
+
                     # Check for exclusion markers (branch exclude)
-                    if (!$no_markers) {
-                        if (/$EXCL_BR_STOP/) {
+                    if not args.no_markers:
+                        if (/$EXCL_BR_STOP/):
                             $exclude_br_flag = 0;
-                        } elsif (/$EXCL_BR_START/) {
+                        elif (/$EXCL_BR_START/):
                             $exclude_br_flag = 1;
-                        }
-                        if (/$excl_br_line/ or $exclude_br_flag):
+
+                        if (/$options.excl_br_line/ or $exclude_br_flag):
                             $exclude_branch = 1;
                         else:
                             $exclude_branch = 0;
-                    }
+
                     # Check for exclusion markers (exception branch exclude)
-                    if (!$no_markers and 
-                        /($EXCL_EXCEPTION_BR_STOP|$EXCL_EXCEPTION_BR_START|$excl_exception_br_line)/) {
-                        warn(f"WARNING: $1 found at {filename}:$last_line but "
+                    if (not args.no_markers and 
+                        /($EXCL_EXCEPTION_BR_STOP|$EXCL_EXCEPTION_BR_START|$options.excl_exception_br_line)/):
+                        warn(f"WARNING: $1 found at {gcov_filename}:$last_line but "
                              "branch exceptions exclusion is not supported with "
                              "gcov versions older than 3.3")
-                    }
+
                     # Source code execution data
-                    if (/^\t\t(.*)$/)
-                    {
+                    if /^\t\t(.*)$/:
                         # Uninstrumented line
                         push(@result, 0);
                         push(@result, 0);
                         push(@result, $1);
                         continue
-                    }
                     $number = substr($_, 0, 16).split(" ")[0]
 
                     # Check for zero count which is indicated
                     # by ######
                     if $number == "######": $number = 0
 
-                    if ($exclude_line) {
+                    if $exclude_line:
                         # Register uninstrumented line instead
                         push(@result, 0);
                         push(@result, 0);
                     else:
                         push(@result, 1);
                         push(@result, $number);
-                    }
                     push(@result, substr($_, 16));
-                }
-            }
-        }
-        else
-        {
+        else:
             # Expect gcov format as used in gcc >= 3.3
             while (<INPUT>)
-            {
                 $_ = $_.rstrip("\n")
 
                 # Also remove CR from line-end
                 s/\015$//;
 
-                if (/^\s*(\d+|\$+|\%+):\s*(\d+)-block\s+(\d+)\s*$/) {
+                if (/^\s*(\d+|\$+|\%+):\s*(\d+)-block\s+(\d+)\s*$/):
                     # Block information - used to group related
                     # branches
                     last_line  = $2;
                     last_block = $3;
-                } elsif (/^branch\s+(\d+)\s+taken\s+(\d+)(?:\s+\(([^)]*)\))?/) {
+                elif (/^branch\s+(\d+)\s+taken\s+(\d+)(?:\s+\(([^)]*)\))?/):
                     if (!$br_coverage);   continue
                     if ($exclude_line);   continue
                     if ($exclude_branch); continue
-                    if (($exclude_exception_branch or $no_exception_br) and 
-                         defined($3) and ($3 == "throw")): continue
+                    if (($exclude_exception_branch or options.no_exception_br) and 
+                        defined($3) and $3 == "throw"): continue
                     $branches = br_gvec_push($branches, last_line, last_block, $1, $2)
-                } elsif (/^branch\s+(\d+)\s+never\s+executed/) {
+                elif (/^branch\s+(\d+)\s+never\s+executed/):
                     if (!$br_coverage);   continue
                     if ($exclude_line);   continue
                     if ($exclude_branch); continue
                     $branches = br_gvec_push($branches, last_line, last_block, $1, '-')
-                }
-                elsif (/^function\s+(.+)\s+called\s+(\d+)\s+/)
-                {
+                elif (/^function\s+(.+)\s+called\s+(\d+)\s+/):
                     if (!$fn_coverage): continue
-                    if ($exclude_line) {
-                        continue
-                    }
+                    if ($exclude_line): continue
                     push(@functions, $2, $1);
-                }
-                elsif (/^call/)
-                {
+                elif (/^call/):
                     # Function call return data
-                }
-                elsif (/^\s*([^:]+):\s*([^:]+):(.*)$/)
-                {
+                    pass
+                elif (/^\s*([^:]+):\s*([^:]+):(.*)$/)
                     my ($count, $line, $code) = ($1, $2, $3);
 
                     # Skip instance-specific counts
@@ -1412,78 +1385,67 @@ def read_gcov_file($filename) -> Tuple[Optional[???], Optional[???], Optional[??
                     last_line  = $line;
                     last_block = $UNNAMED_BLOCK
                     # Check for exclusion markers
-                    if (!$no_markers) {
-                        if (/$EXCL_STOP/) {
+                    if not args.no_markers:
+                        if (/$EXCL_STOP/):
                             $exclude_flag = 0;
-                        } elsif (/$EXCL_START/) {
+                        elif (/$EXCL_START/):
                             $exclude_flag = 1;
-                        }
-                        if (/$opt_excl_line/ or $exclude_flag):
+
+                        if (/$options.excl_line/ or $exclude_flag):
                             $exclude_line = 1;
                         else:
                             $exclude_line = 0;
-                    }
+
                     # Check for exclusion markers (branch exclude)
-                    if (!$no_markers) {
-                        if (/$EXCL_BR_STOP/) {
+                    if not args.no_markers:
+                        if (/$EXCL_BR_STOP/):
                             $exclude_br_flag = 0;
-                        } elsif (/$EXCL_BR_START/) {
+                        elif (/$EXCL_BR_START/):
                             $exclude_br_flag = 1;
-                        }
-                        if (/$excl_br_line/ or $exclude_br_flag):
+
+                        if (/$options.excl_br_line/ or $exclude_br_flag):
                             $exclude_branch = 1;
                         else:
                             $exclude_branch = 0;
-                    }
+
                     # Check for exclusion markers (exception branch exclude)
-                    if (!$no_markers) {
-                        if (/$EXCL_EXCEPTION_BR_STOP/) {
+                    if not args.no_markers:
+                        if (/$EXCL_EXCEPTION_BR_STOP/):
                             $exclude_exception_br_flag = 0;
-                        } elsif (/$EXCL_EXCEPTION_BR_START/) {
+                        elif (/$EXCL_EXCEPTION_BR_START/):
                             $exclude_exception_br_flag = 1;
-                        }
-                        if (/$excl_exception_br_line/ or $exclude_exception_br_flag):
+
+                        if (/$options.excl_exception_br_line/ or $exclude_exception_br_flag):
                             $exclude_exception_branch = 1;
                         else:
                             $exclude_exception_branch = 0;
-                    }
 
                     # Strip unexecuted basic block marker
                     $count =~ s/\*$//;
 
                     # <exec count>:<line number>:<source code>
                     if $line == "0":
-                    {
                         # Extra data
-                    }
+                        pass
                     elif $count == "-":
-                    {
                         # Uninstrumented line
                         push(@result, 0);
                         push(@result, 0);
                         push(@result, $code);
-                    }
-                    else
-                    {
-                        if ($exclude_line) {
+                    else:
+                        if $exclude_line:
                             push(@result, 0);
                             push(@result, 0);
                         else:
                             # Check for zero count
-                            if ($count =~ /^[#=]/) {
+                            if ($count =~ /^[#=]/):
                                 $count = 0;
-                            }
                             push(@result, 1);
                             push(@result, $count);
-                        }
                         push(@result, $code);
-                    }
-                }
-            }
-        }
 
     if $exclude_flag or $exclude_br_flag or $exclude_exception_br_flag:
-        warn(f"WARNING: unterminated exclusion section in {filename}")
+        warn(f"WARNING: unterminated exclusion section in {gcov_filename}")
 
     return (\@result, $branches, \@functions)
 
@@ -1522,12 +1484,12 @@ def read_intermediate_json(gcov_filename: Path, data: Dict[str, object]) -> str:
     Also return the value for current_working_directory.
     """
     try:
-        my text;
-        gunzip(str(gcov_filename), \text)
+        my text;                          # NOK
+        gunzip(str(gcov_filename), \text) # NOK
     except Exception as exc:
-        die(f"ERROR: Could not read {gcov_filename}: $GunzipError")
+        die(f"ERROR: Could not read {gcov_filename}: {exc}")
 
-    json = decode_json(text)
+    json = json.loads(text)
     if json is None or not exists(json["files"]) or ref(json["files"] != "ARRAY"):
         die(f"ERROR: Unrecognized JSON output format in {gcov_filename}")
 
@@ -1543,43 +1505,44 @@ def read_intermediate_json(gcov_filename: Path, data: Dict[str, object]) -> str:
     return json_basedir
 
 # NOK
-def intermediate_text_to_info($fd, $data, $srcdata):
-    # Write DATA in info format to file descriptor FD.
-    #
-    # data:      filename -> file_data:
-    # file_data: concatenated lines of intermediate text data
-    #
-    # srcdata:   filename -> [ excl, brexcl, checksums ]
-    # excl:      lineno -> 1 for all lines for which to exclude all data
-    # brexcl:    lineno -> 1 for all lines for which to exclude branch data
-    #                      2 for all lines for which to exclude exception branch data
-    # checksums: lineno -> source code checksum
-    #
-    # Note: To simplify processing, gcov data is not combined here, that is counts
-    #       that appear multiple times for the same lines/branches are not added.
-    #       This is done by lcov/genhtml when reading the data files.
-
+def intermediate_text_to_info(fhandle, $data, $srcdata):
+    """Write DATA in info format to file descriptor fhandle.
+    
+    data:      filename -> file_data:
+    file_data: concatenated lines of intermediate text data
+    
+    srcdata:   filename -> [ excl, brexcl, checksums ]
+    excl:      lineno -> 1 for all lines for which to exclude all data
+    brexcl:    lineno -> 1 for all lines for which to exclude branch data
+                         2 for all lines for which to exclude exception branch data
+    checksums: lineno -> source code checksum
+    
+    Note: To simplify processing, gcov data is not combined here, that is counts
+          that appear multiple times for the same lines/branches are not added.
+          This is done by lcov/genhtml when reading the data files.
+    """
     if not data: return
 
-    print("TN:$test_name", file=$fd)
+    print(f"TN:$test_name", file=fhandle)
 
     my $c;
 
     branch_num = 0
     for filename, file_data in data.items():
 
-        $ln_found       = 0
-        $ln_hit         = 0
-        functions_found = 0
-        functions_hit   = 0
-        $branches_found = 0
-        $branches_hit   = 0
+        ln_found = 0
+        ln_hit   = 0
+        fn_found = 0
+        fn_hit   = 0
+        br_found = 0
+        br_hit   = 0
 
         my ($excl, $brexcl, $checksums);
         if defined($srcdata->{$filename}):
             $excl, $brexcl, $checksums = @{$srcdata->{$filename}}
 
-        print($fd f"SF:{filename}\n")
+        print(f"SF:{filename}", file=fhandle)
+
         for $line in split(/\n/, file_data):
             if $line =~ /^lcount:(\d+),(\d+),?/:
                 # lcount:<line>,<count>
@@ -1588,7 +1551,8 @@ def intermediate_text_to_info($fd, $data, $srcdata):
                     $c = ",".$checksums->{$1}
                 else:
                     $c = ""
-                print($fd "DA:$1,$2$c\n") if (!$excl->{$1});
+
+                if ! $excl->{$1}: print(f"DA:$1,$2$c", file=fhandle)
 
                 # Intermediate text format does not provide
                 # branch numbers, and the same branch may appear
@@ -1600,27 +1564,30 @@ def intermediate_text_to_info($fd, $data, $srcdata):
                 # b) an instance starts with an lcount line
                 branch_num = 0
 
-                $ln_found += 1
-                if $2 > 0: $ln_hit += 1
+                ln_found += 1
+                if $2 > 0:
+                    ln_hit += 1
             elif $line =~ /^function:(\d+),(\d+),([^,]+)$/:
                 if (!$fn_coverage or $excl->{$1}); continue
 
                 # function:<line>,<count>,<name>
-                print($fd "FN:$1,$3\n");
-                print($fd "FNDA:$2,$3\n");
+                print(f"FN:$1,$3",   file=fhandle)
+                print(f"FNDA:$2,$3", file=fhandle)
 
-                functions_found += 1
-                if $2 > 0: functions_hit += 1
+                fn_found += 1
+                if $2 > 0:
+                    fn_hit += 1
             elif $line =~ /^function:(\d+),\d+,(\d+),([^,]+)$/:
                 if (!$fn_coverage or $excl->{$1}); continue
 
                 # function:<start_line>,<end_line>,<count>,
                 #          <name>
-                print($fd "FN:$1,$3\n");
-                print($fd "FNDA:$2,$3\n");
+                print(f"FN:$1,$3",   file=fhandle)
+                print(f"FNDA:$2,$3", file=fhandle)
 
-                functions_found += 1
-                if $2 > 0: functions_hit += 1
+                fn_found += 1
+                if $2 > 0:
+                    fn_hit += 1
             elif $line =~ /^branch:(\d+),(taken|nottaken|notexec)/:
                 if (!$br_coverage or $excl->{$1} or
                     (defined($brexcl->{$1}) and ($brexcl->{$1} == 1))); continue
@@ -1632,92 +1599,92 @@ def intermediate_text_to_info($fd, $data, $srcdata):
                     $c = 0
                 else:
                     $c = "-"
-                print($fd "BRDA:$1,0,$branch_num,$c\n");
+                print(f"BRDA:$1,0,$branch_num,$c", file=fhandle)
                 branch_num += 1
 
-                $branches_found += 1
-                if $2 == "taken": $branches_hit += 1
+                br_found += 1
+                if $2 == "taken":
+                    br_hit += 1
         
-        if functions_found > 0:
-            print("FNF:%s" % functions_found, file=$fd)
-            print("FNH:%s" % functions_hit,   file=$fd)
-        if $branches_found > 0:
-            print("BRF:%s", $branches_found, file=$fd)
-            print("BRH:%s", $branches_hit,   file=$fd)
-        print("LF:%s", $ln_found, file=$fd)
-        print("LH:%s", $ln_hit,   file=$fd)
+        if fn_found > 0:
+            print("FNF:%s" % fn_found, file=fhandle)
+            print("FNH:%s" % fn_hit,   file=fhandle)
+        if br_found > 0:
+            print("BRF:%s", br_found, file=fhandle)
+            print("BRH:%s", br_hit,   file=fhandle)
+        print("LF:%s", ln_found, file=fhandle)
+        print("LH:%s", ln_hit,   file=fhandle)
 
-        print($fd "end_of_record\n");
+        print("end_of_record", file=fhandle)
 
 # NOK
-def intermediate_json_to_info($fd, $data, $srcdata):
-    # Write DATA in info format to file descriptor FD.
-    #
-    # data:      filename -> file_data:
-    # file_data: GCOV JSON data for file
-    #
-    # srcdata:   filename -> [ excl, brexcl, checksums ]
-    # excl:      lineno -> 1 for all lines for which to exclude all data
-    # brexcl:    lineno -> 1 for all lines for which to exclude branch data
-    #                      2 for all lines for which to exclude exception branch data
-    # checksums: lineno -> source code checksum
-    #
-    # Note: To simplify processing, gcov data is not combined here, that is counts
-    #       that appear multiple times for the same lines/branches are not added.
-    #       This is done by lcov/genhtml when reading the data files.
+def intermediate_json_to_info(fhandle, $data, $srcdata):
+    """Write DATA in info format to file descriptor fhandle.
+    
+    data:      filename -> file_data:
+    file_data: GCOV JSON data for file
+    
+    srcdata:   filename -> [ excl, brexcl, checksums ]
+    excl:      lineno -> 1 for all lines for which to exclude all data
+    brexcl:    lineno -> 1 for all lines for which to exclude branch data
+                         2 for all lines for which to exclude exception branch data
+    checksums: lineno -> source code checksum
+    
+    Note: To simplify processing, gcov data is not combined here, that is counts
+          that appear multiple times for the same lines/branches are not added.
+          This is done by lcov/genhtml when reading the data files.
+    """
+    global options
 
     if not data: return
 
-    print("TN:$test_name", file=$fd)
+    print(f"TN:$test_name", file=fhandle)
 
     branch_num = 0
     for filename, file_data in data.items():
-    {
-        $ln_found       = 0
-        $ln_hit         = 0
-        functions_found = 0
-        functions_hit   = 0
-        $branches_found = 0
-        $branches_hit   = 0
+
+        ln_found = 0
+        ln_hit   = 0
+        fn_found = 0
+        fn_hit   = 0
+        br_found = 0
+        br_hit   = 0
 
         my ($excl, $brexcl, $checksums);
         if (defined($srcdata->{$filename})):
             ($excl, $brexcl, $checksums) = @{$srcdata->{$filename}};
 
-        print($fd f"SF:{filename}\n")
+        print(f"SF:{filename}", file=fhandle)
 
         # Function data
         if $fn_coverage:
-            for my $d (@{$file_data["functions"]})
-            {
-                $line  = $d->{"start_line"};
-                $count = $d->{"execution_count"};
-                $name  = $d->{"name"};
+            for $d in @{$file_data["functions"]}:
+                $line  = $d->{"start_line"}
+                $count = $d->{"execution_count"}
+                $name  = $d->{"name"}
 
                 if (!defined($line) or !defined($count) or
                     !defined($name) or $excl->{$line}); continue
 
-                print($fd "FN:$line,$name\n");
-                print($fd "FNDA:$count,$name\n");
+                print(f"FN:$line,$name",    file=fhandle)
+                print(f"FNDA:$count,$name", file=fhandle)
 
-                functions_found += 1
-                if $count > 0: functions_hit += 1
-            }
+                fn_found += 1
+                if $count > 0:
+                    fn_hit += 1
 
-        if functions_found > 0:
-            print("FNF:%s" % functions_found, file=$fd)
-            print("FNH:%s" % functions_hit,   file=$fd)
+        if fn_found > 0:
+            print("FNF:%s" % fn_found, file=fhandle)
+            print("FNH:%s" % fn_hit,   file=fhandle)
 
         # Line data
-        for my $d (@{$file_data->{"lines"}}):
-        {
-            my $line = $d->{"line_number"};
-            my $count = $d->{"count"};
-            my $c;
+        for my $d in @{$file_data->{"lines"}}:
+            my $line     = $d->{"line_number"};
+            my $count    = $d->{"count"};
             my $branches = $d->{"branches"};
-            my $unexec = $d->{"unexecuted_block"};
+            my $unexec   = $d->{"unexecuted_block"};
 
-            if (!defined($line) or !defined($count) or $excl->{$line}); continue
+            if !defined($line) or !defined($count) or $excl->{$line}; continue
 
             if defined($unexec) and $unexec and $count == 0:
                 $unexec = 1
@@ -1729,44 +1696,37 @@ def intermediate_json_to_info($fd, $data, $srcdata):
             else:
                 $c = ""
 
-            print($fd "DA:$line,$count$c\n");
+            print(f"DA:$line,$count$c", file=fhandle)
 
-            $ln_found += 1
-            if ($count > 0): $ln_hit += 1
+            ln_found += 1
+            if $count > 0:
+                ln_hit += 1
 
             branch_num = 0
             # Branch data
-            if $br_coverage and (!defined($brexcl->{$line}) or ($brexcl->{$line} != 1)):
-            {
-                for my $b (@$branches):
-                {
-                    my $brcount      = $b->{"count"};
-                    my $is_exception = $b->{"throw"};
+            if $br_coverage and (!defined($brexcl->{$line}) or $brexcl->{$line} != 1):
+                for my $b in @$branches:
+                    $brcount      = $b->{"count"}
+                    $is_exception = $b->{"throw"}
 
-                    if (!$is_exception or ((!defined($brexcl->{$line}) or 
-                            ($brexcl->{$line} != 2)) and !$no_exception_br)) {
-                        if (!defined($brcount) or $unexec) {
+                    if (not $is_exception or
+                        ((!defined($brexcl->{$line}) or $brexcl->{$line} != 2) and
+                         not options.no_exception_br)):
+                        if !defined($brcount) or $unexec:
                             $brcount = "-";
-                        }
-                        print($fd "BRDA:$line,0,$branch_num,".
-                              "$brcount\n");
-                    }
+                        print(f"BRDA:$line,0,$branch_num,$brcount", file=fhandle)
 
-                    $branches_found += 1
-                    if $brcount != "-" and $brcount > 0: $branches_hit += 1
+                    br_found += 1
+                    if $brcount != "-" and $brcount > 0:
+                        br_hit += 1
                     branch_num += 1
-                }
-            }
-        }
 
-        if ($branches_found > 0) {
-            printf($fd "BRF:%s\n", $branches_found);
-            printf($fd "BRH:%s\n", $branches_hit);
-        }
-        printf($fd "LF:%s\n", $ln_found);
-        printf($fd "LH:%s\n", $ln_hit);
-        print($fd "end_of_record\n");
-    }
+        if br_found > 0:
+            printf("BRF:%s" % br_found, file=fhandle)
+            printf("BRH:%s" % br_hit,   file=fhandle)
+        print("LF:%s" % ln_found, file=fhandle)
+        print("LH:%s" % ln_hit,   file=fhandle)
+        print("end_of_record",    file=fhandle)
 
 # NOK
 def get_output_fd($outfile, $file):
@@ -1813,7 +1773,9 @@ def process_intermediate($file: Path, $dir, $tempdir):
     """Create output for a single file (either a data file or a graph file)
     using gcov's intermediate option.
     """
+    global args
     global cwd
+    global ignore
     global graph_file_extension
 
     my $base;
@@ -1904,7 +1866,7 @@ def process_intermediate($file: Path, $dir, $tempdir):
         filter_source_files(\%data)
 
         # Get data on exclusion markers and checksums if requested
-        if !$no_markers or $checksum:
+        if not args.no_markers or $checksum:
             $srcdata: Dict[str, ???] = get_all_source_data(%data.keys())
 
         # Generate output
@@ -1935,14 +1897,6 @@ def map_llvm_version(version: int) -> int:
         return 0x040200
 
 
-def version_to_str(version: int) -> str:
-    """Return a readable version of encoded gcov version."""
-    a = version >> 16 & 0xFF
-    b = version >>  8 & 0xFF
-    c = version       & 0xFF
-    return f"{a}.{b}.{c}"
-
-
 def get_gcov_version() -> Tuple[int, str]:
     """Get the GCOV tool version. Return an integer number which represents
     the GCOV version. Version numbers can be compared using standard integer
@@ -1969,7 +1923,7 @@ def get_gcov_version() -> Tuple[int, str]:
         die("ERROR: cannot retrieve gcov version!")
     #local $/;  # NOK
     # Remove all bracketed information
-    version_string = re.sub(r"\([^\)]*\)", "", process.stdout)
+    version_string = re.sub(r"\([^\)]*\)", "", gcov_process.stdout)
 
     match = re.???(r"(\d+)\.(\d+)(\.(\d+))?", version_string) # NOK
     if match:
@@ -1984,11 +1938,19 @@ def get_gcov_version() -> Tuple[int, str]:
     if re.???(r"LLVM", version_string): # NOK
         result = map_llvm_version(result)
         info(f"Found LLVM gcov version {a}.{b}.{c}, which emulates "
-             "gcov version {}".format(version_to_str(result)))
+             "gcov version {}".format(gcov_version_to_str(result)))
     else:
-        info("Found gcov version: {}".format(version_to_str(result)))
+        info("Found gcov version: {}".format(gcov_version_to_str(result)))
 
     return (result, version_string)
+
+
+def gcov_version_to_str(version: int) -> str:
+    """Return a readable version of encoded gcov version."""
+    a = version >> 16 & 0xFF
+    b = version >>  8 & 0xFF
+    c = version       & 0xFF
+    return f"{a}.{b}.{c}"
 
 # NOK
 def system_no_output($mode, *args):
@@ -2036,10 +1998,10 @@ def system_no_output($mode, *args):
         if mode & 1: sys.stdout = prev_stdout
         if mode & 2: sys.stderr = prev_stderr
         # Remove empty output files
-        if $stdout_file is not None and -z $stdout_file):
+        if $stdout_file is not None and -z $stdout_file:
             Path($stdout_file).unlink()
             $stdout_file = None
-        if $stderr_fileis not None and -z $stderr_file):
+        if $stderr_file is not None and -z $stderr_file:
             Path($stderr_file).unlink()
             $stderr_file = None
  
@@ -2047,12 +2009,12 @@ def system_no_output($mode, *args):
 
 # NOK
 def get_all_source_data(filenames: List[???]) -> Dict[str, ???]:
-    # Scan specified source code files for exclusion markers and return
-    #   filename -> [ excl, brexcl, checksums ]
-    #   excl:      lineno -> 1 for all lines for which to exclude all data
-    #   brexcl:    lineno -> 1 for all lines for which to exclude branch data
-    #   checksums: lineno -> source code checksum
-
+    """Scan specified source code files for exclusion markers and return
+      filename -> [ excl, brexcl, checksums ]
+      excl:      lineno -> 1 for all lines for which to exclude all data
+      brexcl:    lineno -> 1 for all lines for which to exclude branch data
+      checksums: lineno -> source code checksum
+    """
     data: Dict[str, ???] = {}
     failed = False
     for filename in filenames:
@@ -2078,13 +2040,15 @@ def get_source_data(filename: Path) -> Tuple[???, ???, ???]:
       brexcl:    lineno -> 1 for all lines for which to exclude branch data
       checksums: lineno -> source code checksum
     """
+    global options
     global intermediate
 
+    ln_flag           = False
+    br_flag           = False
+    exception_br_flag = False
+
     my %list;
-    my $flag = 0;
     my %brdata;
-    my $brflag = 0;
-    my $exceptionbrflag = 0;
     my %checksums;
 
     try:
@@ -2094,47 +2058,43 @@ def get_source_data(filename: Path) -> Tuple[???, ???, ???]:
         return
     with fhandle:
         while (<fhandle>):
-            if (/$EXCL_STOP/) {
-                $flag = 0;
-            } elsif (/$EXCL_START/) {
-                $flag = 1;
-            }
-            if (/$opt_excl_line/ or $flag) {
-                $list{$.} = 1;
-            }
-            if (/$EXCL_BR_STOP/) {
-                $brflag = 0;
-            } elsif (/$EXCL_BR_START/) {
-                $brflag = 1;
-            }
-            if (/$EXCL_EXCEPTION_BR_STOP/) {
-                $exceptionbrflag = 0;
-            } elsif (/$EXCL_EXCEPTION_BR_START/) {
-                $exceptionbrflag = 1;
-            }
-            if (/$excl_br_line/ or $brflag) {
-                $brdata{$.} = 1;
-            } elsif (/$excl_exception_br_line/ or $exceptionbrflag) {
-                $brdata{$.} = 2;
-            }
-            if ($checksum) {
+            if /$EXCL_STOP/:
+                ln_flag = False
+            elif /$EXCL_START/:
+                ln_flag = True
+            if /$options.excl_line/ or ln_flag:
+                $list{$.} = 1
+            if /$EXCL_BR_STOP/:
+                br_flag = False
+            elif /$EXCL_BR_START/:
+                br_flag = True
+            if /$EXCL_EXCEPTION_BR_STOP/:
+                exception_br_flag = False
+            elif /$EXCL_EXCEPTION_BR_START/:
+                exception_br_flag = True
+            if /$options.excl_br_line/ or br_flag:
+                $brdata{$.} = 1
+            elif /$options.excl_exception_br_line/ or exception_br_flag:
+                $brdata{$.} = 2
+            if $checksum:
                 chomp();
-                $checksums{$.} = md5_base64($_);
-            }
-            if (intermediate and not gcov_capabilities.get('json-format') and
-                /($EXCL_EXCEPTION_BR_STOP|$EXCL_EXCEPTION_BR_START|$excl_exception_br_line)/):
+                $checksums{$.} = md5_base64($_)
+            if (intermediate and "json-format" not in gcov_capabilities and
+                /($EXCL_EXCEPTION_BR_STOP|$EXCL_EXCEPTION_BR_START|$options.excl_exception_br_line)/):
                 warn(f"WARNING: $1 found at {filename}:$. but branch exceptions "
                      "exclusion is not supported when using text intermediate "
                      "format")
 
-    if $flag or $brflag or $exceptionbrflag:
+    if ln_flag or br_flag or exception_br_flag:
         warn(f"WARNING: unterminated exclusion section in {filename}")
 
-    return (\%list, \%brdata, \%checksums);
+    return (\%list, \%brdata, \%checksums)
 
 # NOK
 def process_graphfile(graph_filename: Path, $dir):
     """ """
+    global options
+    global args
     global cwd
 
     my $graph_dir;
@@ -2183,7 +2143,7 @@ def process_graphfile(graph_filename: Path, $dir):
     adjust_source_filenames($instr, Path($base_dir))
     adjust_source_filenames($graph, Path($base_dir))
 
-    if ! $no_markers:
+    if not args.no_markers:
         # Apply exclusion marker data to graph file data
         instr, graph = apply_exclusion_data($instr, $graph)
 
@@ -2212,11 +2172,11 @@ def process_graphfile(graph_filename: Path, $dir):
         my $linedata;
 
         # Skip external files if requested
-        if not opt_external and if is_external(filename):
+        if not options.external and if is_external(filename):
             info(f"  ignoring data for external file {filename}")
             continue
 
-        print(INFO_HANDLE f"SF:{filename}\n")
+        print(f"SF:{filename}", file=INFO_HANDLE)
 
         if defined($funcdata) and $fn_coverage:
             my @functions = sorted({$funcdata->{$a}->[0] <=> $funcdata->{$b}->[0]} keys(%{$funcdata}))
@@ -2421,12 +2381,13 @@ def adjust_source_filenames(data_dict: Dict[str, object], base_dir: Path):
 
 def filter_source_files(data_dict: Dict[???, ???]): # NOK
     """Remove unwanted source file data from data_dict."""
+    global options
     global excluded_files
 
     for filename in list(data_dict.keys()):
 
         # Skip external files if requested
-        if not opt_external and is_external(filename):
+        if not options.external and is_external(filename):
             # Remove file data
             del data_dict[filename]
             excluded_files.add(filename)
@@ -3172,7 +3133,7 @@ def graph_read(fhandle, length: int, description: Optional[str] = None, *,
 
     return data
 
-# NOK
+
 def graph_error(filename: Path, msg: str):
     """Print message about error in graph file.
     If ignore_graph_error is set, return. Otherwise abort.
@@ -3205,11 +3166,9 @@ def map_gcno_version(version: int) ->int:
     return major << 16 | minor << 8
 
 
-def get_gcov_capabilities() -> Dict[str, bool]:
+def get_gcov_capabilities() -> Set[str]:
     """Determine the list of available gcov options."""
-    global gcov_tool
-
-    gcov_help = `options.gcov_tool --help` # NOK
+    global options
 
     short_option_translations = {
         "a": "all-blocks",
@@ -3227,7 +3186,12 @@ def get_gcov_capabilities() -> Dict[str, bool]:
         "x": "hash-filenames",
     }
 
-    capabilities: Dict[str, bool] = {}
+    gcov_process = subprocess.run([options.gcov_tool, "--help"],
+                                  capture_output=True, encoding="utf-8",
+                                  check=True)
+    gcov_help = gcov_process.stdout
+
+    capabilities: Set[str] = set()
     for line in gcov_help.splitlines():
         match = re.???(r"--(\S+)", line) # NOK
         if match:
@@ -3238,21 +3202,20 @@ def get_gcov_capabilities() -> Dict[str, bool]:
             if not match:
                 continue
             capability = short_option_translations.get(match.group(1))
-            if not capability:
+            if capability is None:
                 continue
         if capability in ("help", "version", "object-directory"):
             continue
 
-        capabilities[capability] = True
+        capabilities.add(capability)
         debug(f"gcov has capability '{capability}'\n")
 
     return capabilities
 
 
-def parse_ignore_errors(ignore_errors: Optional[List]):
+def parse_ignore_errors(ignore_errors: Optional[List], ignore: Dict):
     """Parse user input about which errors to ignore."""
     if not ignore_errors: return
-    global ignore
 
     items = []
     for item in ignore_errors:
@@ -3282,22 +3245,21 @@ def is_external(filename: str) -> bool:
             return False
     return True
 
-# NOK
-def parse_compat_modes(opt: Optional[str]):
+
+def parse_compat_modes(opt: Optional[str], compat_value: Dict[int, int]):
     """Determine compatibility mode settings."""
-    global compat_value
-    global opt_compat_libtool
+    global options
 
     # Initialize with defaults
     compat_value = COMPAT_MODE_DEFAULTS.copy()
 
     # Add old style specifications
-    if opt_compat_libtool is not None:
+    if options.compat_libtool is not None:
         compat_value[COMPAT_MODE_LIBTOOL] = (COMPAT_VALUE_ON
-                                             if opt_compat_libtool else
+                                             if options.compat_libtool else
                                              COMPAT_VALUE_OFF)
     # Parse settings
-    opt_list: List = re.split(r"\s*,\s*", opt) if opt is not None else []
+    opt_list: List[str] = re.split(r"\s*,\s*", opt) if opt is not None else []
 
     specified = set()
     for directive in opt_list:
@@ -3328,7 +3290,6 @@ def parse_compat_modes(opt: Optional[str]):
 
     # Perform auto-detection
     for mode in sorted(compat_value.keys()):
-
         value = compat_value[mode]
         name  = compat_name(mode)
         is_autodetect = ""
