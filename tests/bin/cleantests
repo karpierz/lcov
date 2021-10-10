@@ -10,10 +10,10 @@ shift
 TESTS="$*"
 
 for TEST in ${TESTS} ; do
-	if [[ -d "${TEST}" ]] ; then
-		# Enter sub-directory
-		${MAKE} -C "${TEST}" clean
-	fi
+    if [[ -d "${TEST}" ]] ; then
+        # Enter sub-directory
+        ${MAKE} -C "${TEST}" clean
+    fi
 done
 
 exit 0

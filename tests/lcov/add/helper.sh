@@ -14,12 +14,12 @@ shift 2
 
 ADD=
 for INFO in $* ; do
-	ADD="$ADD -a $INFO"
+    ADD="$ADD -a $INFO"
 done
 
 if [ -z "$MULTI" -o -z "$REFFILE" -o -z "$ADD" ] ; then
-	echo "Usage: $0 <multiplier> <reference_file> <add_file> [<add_file>...]" >&2
-	exit 1
+    echo "Usage: $0 <multiplier> <reference_file> <add_file> [<add_file>...]" >&2
+    exit 1
 fi
 
 OUTFILE="add_"$(basename "$REFFILE")
@@ -29,18 +29,18 @@ set -x
 
 echo "Adding files..."
 if ! $LCOV $ADD -o "$OUTFILE" ; then
-	echo "Error: lcov returned with non-zero exit code $?" >&2
-	exit 1
+    echo "Error: lcov returned with non-zero exit code $?" >&2
+    exit 1
 fi
 
 echo "Normalizing result..."
 if ! norminfo "$OUTFILE" "$MULTI" > "$SORTFILE" ; then
-	echo "Error: Normalization of lcov result file failed" >&2
-	exit 1
+    echo "Error: Normalization of lcov result file failed" >&2
+    exit 1
 fi
 
 echo "Comparing with reference..."
 if ! diff -u "$REFFILE" "$SORTFILE" ; then
-	echo "Error: Result of combination differs from reference file" >&2
-	exit 1
+    echo "Error: Result of combination differs from reference file" >&2
+    exit 1
 fi

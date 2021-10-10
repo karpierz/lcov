@@ -20,16 +20,16 @@ HAVE_EXT=0
 
 # Get results
 while read LINE ; do
-	set -- $LINE
-	case "$1" in
-	start_time)	START_TIME=$2 ;;
-	end_time)	END_TIME=$2 ;;
-	pass)		let SUCCESS=$SUCCESS+1 ;;
-	fail)		let FAILED=$FAILED+1 ;;
-	skip)		let SKIPPED=$SKIPPED+1 ;;
-	elapsed)	let TOTAL_TIME=$TOTAL_TIME+$3 ; HAVE_EXT=1 ;;
-	resident)	let TOTAL_MEM=$TOTAL_MEM+$3 ; HAVE_EXT=1 ;;
-	esac
+    set -- $LINE
+    case "$1" in
+        start_time) START_TIME=$2 ;;
+        end_time)   END_TIME=$2 ;;
+        pass)       let SUCCESS=$SUCCESS+1 ;;
+        fail)       let FAILED=$FAILED+1 ;;
+        skip)       let SKIPPED=$SKIPPED+1 ;;
+        elapsed)    let TOTAL_TIME=$TOTAL_TIME+$3 ; HAVE_EXT=1 ;;
+        resident)   let TOTAL_MEM=$TOTAL_MEM+$3 ; HAVE_EXT=1 ;;
+    esac
 done < "$COUNTFILE"
 
 exec 3>&1
@@ -65,7 +65,7 @@ echo >&3
 echo "Result log stored in $LOGFILE" >&3
 
 if [ "$FAILED" -gt 0 ] ; then
-	exit 1
+    exit 1
 fi
 
 exit 0

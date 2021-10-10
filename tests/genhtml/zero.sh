@@ -23,15 +23,15 @@ echo "STDERR_STOP"
 
 # Check exit code
 if [[ $RC -ne 0 ]] ; then
-	echo "Error: Non-zero genhtml exit code $RC"
-	exit 1
+    echo "Error: Non-zero genhtml exit code $RC"
+    exit 1
 fi
 
 # Output must not contain warnings
 if [[ -s ${STDERR} ]] ; then
-	echo "Error: Output on stderr.log:"
-	cat ${STDERR}
-	exit 1
+    echo "Error: Output on stderr.log:"
+    cat ${STDERR}
+    exit 1
 fi
 
 # Output must indicate correct coverage rates
@@ -40,16 +40,16 @@ check_counts "${ZEROCOUNTS}" "${STDOUT}" || exit 1
 
 # Check output directory
 if [[ ! -d "$OUTDIR" ]] ; then
-	echo "Error: Output directory was not created"
-	exit 1
+    echo "Error: Output directory was not created"
+    exit 1
 fi
 
 # Check output files
 NUM_HTML_FILES=$(find ${OUTDIR} -name \*.html | wc -l)
 
 if [[ "$NUM_HTML_FILES" -eq 0 ]] ; then
-	echo "Error: No HTML file was generated"
-	exit 1
+    echo "Error: No HTML file was generated"
+    exit 1
 fi
 
 # Success

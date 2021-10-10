@@ -5,18 +5,18 @@
 
 # Skip over any valid options
 while [[ $1 =~ ^- ]] ; do
-	shift
+    shift
 done
 
 if [[ -n "$*" ]] ; then
-	PREFIX="$*"
+    PREFIX="$*"
 else
-	PREFIX="aaa"
+    PREFIX="aaa"
 fi
 
 while read LINE ; do
-	echo "${PREFIX}${LINE}"
-	unset LINE
+    echo "${PREFIX}${LINE}"
+    unset LINE
 done
 
 # Last line isn't newline-terminated

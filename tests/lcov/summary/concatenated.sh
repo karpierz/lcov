@@ -17,20 +17,20 @@ cat "${STDOUT}" "${STDERR}"
 
 # Exit code must be zero
 if [[ $RC -ne 0 ]] ; then
-	echo "Error: Non-zero lcov exit code $RC"
-	exit 1
+    echo "Error: Non-zero lcov exit code $RC"
+    exit 1
 fi
 
 # There must be output on stdout
 if [[ ! -s "${STDOUT}" ]] ; then
-	echo "Error: Missing output on standard output"
-	exit 1
+    echo "Error: Missing output on standard output"
+    exit 1
 fi
 
 # There must not be any output on stderr
 if [[ -s "${STDERR}" ]] ; then
-	echo "Error: Unexpected output on standard error"
-	exit 1
+    echo "Error: Unexpected output on standard error"
+    exit 1
 fi
 
 # Check counts in output
