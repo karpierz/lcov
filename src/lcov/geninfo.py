@@ -40,7 +40,6 @@ geninfo
 #use File::Copy qw(copy);
 #use Getopt::Long;
 #use Digest::MD5 qw(md5_base64);
-#use Cwd qw/abs_path/;
 #use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
 if $^O == "msys":
     require File::Spec::Win32;
@@ -56,6 +55,7 @@ from .util import sort_unique
 from .util import sort_unique_lex
 from .util import remove_items_from_dict
 from .util import apply_config
+from .util import system_no_output, NO_ERROR
 from .util import transform_pattern
 from .util import strip_spaces_in_options
 from .util import warn, die
@@ -163,7 +163,7 @@ our $test_name = "";
 args.quiet: bool = False  # If set, suppress information messages
 args.help:  bool = False  # Help option flag
 our $output_filename;
-our $base_directory;
+$base_directory: Optional = None
 our $version;
 args.follow: bool = False
 our $checksum;
@@ -287,7 +287,7 @@ if (!GetOptions(
         "output-filename|o=s" => \$output_filename,
         "checksum"            => \$checksum,
         "no-checksum"         => \$no_checksum,
-        "base-directory|b=s"  => \$base_directory,
+        "base-directory|b=s"  => \args.base_directory,
         "version|v"           => \$version,
         "quiet|q"             => \args.quiet,
         "help|h|?"            => \args.help,
@@ -341,7 +341,7 @@ if $version:
     sys.exit(0)
 
 # Check gcov tool
-if system_no_output(3, options.gcov_tool, "--help") == -1:
+if system_no_output(3, options.gcov_tool, "--help")[0] != NO_ERROR:
     die(f"ERROR: need tool {options.gcov_tool}!")
 
 gcov_version, gcov_version_string = get_gcov_version()
@@ -402,8 +402,8 @@ if options.adjust_testname:
     $test_name =~ s/\W/_/g;
 
 # Make sure base_directory contains an absolute path specification
-if $base_directory:
-    $base_directory = solve_relative_path(cwd, $base_directory)
+if args.base_directory:
+    args.base_directory = solve_relative_path(cwd, args.base_directory)
 
 # Determine checksum mode (default is off)
 $checksum = bool($checksum) if $checksum is not None else False
@@ -443,7 +443,7 @@ if defined($output_filename) and $output_filename != "-":
         $output_filename = $cwd."/".$output_filename;
 
 # Build list of directories to identify external files
-for entry in (@data_directory + [$base_directory]):
+for entry in (@data_directory + [args.base_directory]):
     if entry is not None:
         internal_dirs.append(solve_relative_path(cwd, entry))
 
@@ -660,7 +660,6 @@ def process_dafile(da_filename: Path, $dir):
     my $bb_basename;    # Basename of the original graph file
     my $graph;        # Contents of graph file
     my $instr;        # Contents of graph file part 2
-    my $gcov_error;        # Error code of gcov tool
     my $object_dir;        # Directory containing all object files
     my $source_filename;    # Name of a source code file
     my $gcov_file;        # Name of a .gcov file
@@ -700,7 +699,7 @@ def process_dafile(da_filename: Path, $dir):
         da_renamed = (-z da_filename)
 
         # Construct base_dir for current file
-        $base_dir = $base_directory if $base_directory else $source_dir
+        $base_dir = args.base_directory or $source_dir
 
         # Check for writable $base_dir (gcov will try to write files there)
         if not os.access($base_dir, os.W_OK):
@@ -769,22 +768,22 @@ def process_dafile(da_filename: Path, $dir):
 
         if da_renamed:
             # Need to rename empty data file to workaround gcov <= 3.2.x bug (Abort)
-            if system_no_output(3, "mv", f"{da_filename}", f"{da_filename}.ori") != NO_ERROR:
+            if system_no_output(3, "mv", f"{da_filename}", f"{da_filename}.ori")[0] != NO_ERROR:
                 die(f"ERROR: cannot rename {da_filename}")
 
         # Execute gcov command and suppress standard output
-        $gcov_error = system_no_output(1, options.gcov_tool, da_filename,
-                                       "-o", $object_dir, @gcov_options)
+        gcov_error = system_no_output(1, options.gcov_tool, da_filename,
+                                      "-o", $object_dir, @gcov_options)[0]
 
         if da_renamed:
-            if system_no_output(3, "mv", f"{da_filename}.ori", f"{da_filename}") != NO_ERROR:
+            if system_no_output(3, "mv", f"{da_filename}.ori", f"{da_filename}")[0] != NO_ERROR:
                 die(f"ERROR: cannot rename {da_filename}.ori", end="") # !!! chyba bex end=""
 
         # Clean up temporary links
         for $_ in @tmp_links:
             Path($_).unlink()
 
-        if $gcov_error:
+        if gcov_error:
             if ignore[ERROR_GCOV]:
                 warn(f"WARNING: GCOV failed for {da_filename}!")
                 return
@@ -1751,22 +1750,22 @@ def get_output_fd($outfile, $file):
     return fhandle
 
 # NOK
-def print_gcov_warnings($stderr_file, is_graph: bool, $map):
+def print_gcov_warnings(stderr_file: Path, is_graph: bool, map: Dict[???, ???]):
     """Print GCOV warnings in file STDERR_FILE to STDERR.
     If IS_GRAPH is non-zero, suppress warnings about missing as these
     are expected. Replace keys found in MAP with their values.
     """
     try:
-        fhandle = Path($stderr_file).open("rt")
+        fhandle = stderr_file.open("rt")
     except Exception as exc:
         warn(f"WARNING: Could not open GCOV stderr file {stderr_file}: {exc}")
         return
     with fhandle:
         for line in <fhandle>:
-            if is_graph and line =~ r"cannot open data file":
+            if is_graph and re.???(r"cannot open data file", line):
                 continue
-            for $key in (keys(%{$map})):
-                line =~ s/\Q$key\E/$map->{$key}/g;
+            for key, val in map.items():
+                line =~ s/\Q$key\E/$val/g
             print(line, end="", file=sys.stderr)
 
 # NOK
@@ -1818,7 +1817,7 @@ def process_intermediate($file: Path, $dir, $tempdir):
         if defined($out):
             Path($out).unlink()
         if defined($err):
-            print_gcov_warnings($err, is_graph, { $data_file => $file, })
+            print_gcov_warnings(Path($err), is_graph, { $data_file: $file, })
             Path($err).unlink()
         if $rc:
             errmsg = f"GCOV failed for {file}"
@@ -1840,13 +1839,13 @@ def process_intermediate($file: Path, $dir, $tempdir):
             Path(gcov_filename).unlink()
             $json_format = 1;
 
-        if ! %data:
+        if not %data:
             warn(f"WARNING: GCOV did not produce any data for {file}")
             return
 
         # Determine base directory
-        if defined($base_directory):
-            $base = $base_directory;
+        if args.base_directory is not None:
+            $base = args.base_directory
         elif json_basedir is not None:
             $base = json_basedir
         else:
@@ -1954,21 +1953,21 @@ def gcov_version_to_str(version: int) -> str:
     return f"{a}.{b}.{c}"
 
 # NOK
-def system_no_output($mode, *args):
-    # system_no_output(mode, parameters)
-    #
-    # Call an external program using PARAMETERS while suppressing depending on
-    # the value of MODE:
-    #
-    #   MODE & 1: suppress sys.stdout
-    #   MODE & 2: suppress sys.stderr
-    #   MODE & 4: redirect to temporary files instead of suppressing
-    #
-    # Return (stdout, stderr, rc):
-    #    stdout: path to tempfile containing stdout or None
-    #    stderr: path to tempfile containing stderr or None
-    #    0 on success, non-zero otherwise
+def system_no_output(mode: int, *args) -> Tuple[int, Optional[???], Optional[???]]:
+    """Call an external program using args while suppressing
+    depending on the value of mode:
 
+      MODE & 1: suppress sys.stdout
+      MODE & 2: suppress sys.stderr
+      MODE & 4: redirect to temporary files instead of suppressing
+
+    Return (stdout, stderr, rc):
+       stdout: path to tempfile containing stdout or None
+       stderr: path to tempfile containing stderr or None
+       0 on success, non-zero otherwise
+    """
+    stdout_file = None
+    stderr_file = None
     # Save old stdout and stderr handles
     if mode & 1: prev_stdout = sys.stdout
     if mode & 2: prev_stderr = sys.stderr
@@ -1976,12 +1975,12 @@ def system_no_output($mode, *args):
         # Redirect to temporary files
         if mode & 1:
             $fd, $stdout_file = tempfile(UNLINK => 1)
-            sys.stdout = Path($stdout_file).open("wt")
+            sys.stdout = Path(stdout_file).open("wt")
                 or warn("$!")
             close($fd);
         if mode & 2:
             $fd, $stderr_file = tempfile(UNLINK => 1)
-            sys.stderr = Path($stderr_file).open("wt")
+            sys.stderr = Path(stderr_file).open("wt")
                 or warn("$!")
             close($fd);
     else:
@@ -1990,7 +1989,7 @@ def system_no_output($mode, *args):
         if mode & 2: sys.stderr = open(os.devnull, "wb")
     try:
         debug("system({}"")\n".format(" ".join(*args)))
-        $result = os.system(*args)
+        result = os.system(*args)
     finally:
         # Close redirected handles
         if mode & 1: close(sys.stdout)
@@ -1999,14 +1998,14 @@ def system_no_output($mode, *args):
         if mode & 1: sys.stdout = prev_stdout
         if mode & 2: sys.stderr = prev_stderr
         # Remove empty output files
-        if $stdout_file is not None and -z $stdout_file:
-            Path($stdout_file).unlink()
-            $stdout_file = None
-        if $stderr_file is not None and -z $stderr_file:
-            Path($stderr_file).unlink()
-            $stderr_file = None
+        if stdout_file is not None and -z $stdout_file:
+            Path(stdout_file).unlink()
+            stdout_file = None
+        if stderr_file is not None and -z $stderr_file:
+            Path(stderr_file).unlink()
+            stderr_file = None
 
-    return ($stdout_file, $stderr_file, $result)
+    return (result, stdout_file, stderr_file)
 
 # NOK
 def get_all_source_data(filenames: List[???]) -> Dict[str, ???]:
@@ -2098,15 +2097,6 @@ def process_graphfile(graph_filename: Path, $dir):
     global args
     global cwd
 
-    my $graph_dir;
-    my $graph_basename;
-    my $source_dir;
-    my $base_dir;
-    my $graph;
-    my $instr;
-
-    local *INFO_HANDLE;
-
     info("Processing %s", abs2rel(str(graph_filename), $dir))
 
     # Get path to data file in absolute and normalized form (begins with /,
@@ -2115,13 +2105,13 @@ def process_graphfile(graph_filename: Path, $dir):
     # Get directory and basename of data file
     $graph_dir, $graph_basename, _ = split_filename(graph_filename)
 
-    $source_dir = $graph_dir;
+    $source_dir = $graph_dir
     if is_compat(COMPAT_MODE_LIBTOOL):
         # Avoid files from .libs dirs
-        $source_dir =~ s/\.libs$//
+        $source_dir = re.sub(r"\.libs$", "", $source_dir)
 
     # Construct base_dir for current file
-    $base_dir = $base_directory if $base_directory else $source_dir
+    $base_dir = args.base_directory or $source_dir
 
     # Ignore empty graph file (e.g. source file with no statement)
     if (-z graph_filename):
@@ -2154,8 +2144,10 @@ def process_graphfile(graph_filename: Path, $dir):
             INFO_HANDLE = sys.stdout
         else:
             # Append to output file
-            INFO_HANDLE = Path($output_filename).open(">>")
-                or die("ERROR: cannot write to $output_filename!")
+            try:
+                INFO_HANDLE = Path($output_filename).open(">>")
+            except:
+                die(f"ERROR: cannot write to $output_filename!")
     else:
         # Open .info file for output
         try:
@@ -2164,7 +2156,8 @@ def process_graphfile(graph_filename: Path, $dir):
             die(f"ERROR: cannot create {graph_filename}.info!")
 
     # Write test name
-    printf(INFO_HANDLE "TN:%s\n", $test_name);
+    print("TN:%s" % $test_name, file=INFO_HANDLE)
+
     for filename in sorted($instr.keys()):
 
         my $funcdata = $graph->{$filename};
@@ -2180,30 +2173,30 @@ def process_graphfile(graph_filename: Path, $dir):
         print(f"SF:{filename}", file=INFO_HANDLE)
 
         if defined($funcdata) and $fn_coverage:
-            my @functions = sorted({$funcdata->{$a}->[0] <=> $funcdata->{$b}->[0]} keys(%{$funcdata}))
-
+            functions = sorted({ $funcdata->{$a}->[0] <=> $funcdata->{$b}->[0] }
+                               $funcdata.keys())
             # Gather list of instrumented lines and functions
-            for $func in @functions:
-                $linedata = $funcdata->{$func};
+            for func in functions:
+                $linedata = $funcdata[func]
                 # Print function name and starting line
-                print(INFO_HANDLE "FN:".$linedata->[0].",".filter_fn_name($func)."\n");
+                print("FN:".$linedata->[0].",".filter_fn_name(func), file=INFO_HANDLE)
             # Print zero function coverage data
-            for $func in @functions:
-                print(INFO_HANDLE "FNDA:0,".filter_fn_name($func)."\n");
+            for func in functions:
+                print("FNDA:0,".filter_fn_name(func), file=INFO_HANDLE)
             # Print function summary
-            print(INFO_HANDLE "FNF:{}\n".format(len(@functions)))
-            print(INFO_HANDLE "FNH:0\n");
+            print("FNF:{}".format(len(functions)), file=INFO_HANDLE)
+            print("FNH:0", file=INFO_HANDLE)
 
         # Print zero line coverage data
         foreach $line (@{$instr->{$filename}}):
-            print(INFO_HANDLE "DA:$line,0\n");
+            print("DA:$line,0", file=INFO_HANDLE)
         # Print line summary
-        print(INFO_HANDLE "LF:{}\n".format(len(@{$instr->{$filename}})));
-        print(INFO_HANDLE "LH:0\n");
+        print("LF:{}".format(len(@{$instr->{$filename}})), file=INFO_HANDLE)
+        print("LH:0", file=INFO_HANDLE)
 
-        print(INFO_HANDLE "end_of_record\n");
+        print("end_of_record", file=INFO_HANDLE)
 
-    if ! ($output_filename and $output_filename == "-"):
+    if not ($output_filename and $output_filename == "-"):
         close(INFO_HANDLE);
 
 # NOK
@@ -2245,7 +2238,7 @@ def apply_exclusion_data($instr, $graph):
             my @new_data;
             # Copy only lines which are not excluded
             for $line in (@{$line_data}):
-                if ! $excl->{$line}:
+                if not $excl->{$line}:
                     push(@new_data, $line)
 
             # Store modified list
@@ -2270,7 +2263,7 @@ def apply_exclusion_data($instr, $graph):
         my @new_data;
         # Copy only lines which are not excluded
         for $line in @{$line_data}:
-            if ! $excl->{$line}:
+            if not $excl->{$line}:
                 push(@new_data, $line)
 
         # Store modified list
@@ -2495,12 +2488,12 @@ def graph_from_bb($bb: Dict[???, ???], $fileorder: Dict[???, ???], bb_filename: 
 
     return (instr, graph)
 
-# NOK
-def graph_find_base(bb: Dict[???, Dict[???, ???]]) -> Optional[str]:
-    # Try to identify the filename which is the base source file for the
-    # specified bb data.
 
-    file_count: Dict[???, int] = {}
+def graph_find_base(bb: Dict[???, Dict[???, ???]]) -> Optional[str]: # NOK
+    """Try to identify the filename which is the base source file
+    for the specified bb data.
+    """
+    file_count: Dict[???, int] = {} # NOK
     # Identify base name for this bb data.
     for filedata in bb.values():
         for file in filedata.keys():

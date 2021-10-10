@@ -46,7 +46,9 @@ def remove_items_from_dict(dict: Dict, fns: List):
         dict.pop(fn, None)
 
 
-def system_no_output(mode: int, *args) -> int:
+NO_ERROR = 0
+
+def system_no_output(mode: int, *args) -> Tuple[int, Optional[???], Optional[???]]:
     """Call an external program using ARGS while suppressing
     depending on the value of MODE:
 
@@ -74,7 +76,7 @@ def system_no_output(mode: int, *args) -> int:
         if mode & 1: sys.stdout = prev_stdout
         if mode & 2: sys.stderr = prev_stderr
 
-    return result
+    return (result, )
 
 # NOK
 def read_file(filename: Path) -> Optional[str]:

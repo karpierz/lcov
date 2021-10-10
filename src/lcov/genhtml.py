@@ -51,7 +51,6 @@ genhtml
 #use File::Basename;
 #use Getopt::Long;
 #use Digest::MD5 qw(md5_base64);
-#use Cwd qw/abs_path/;
 
 from typing import List, Dict, Optional
 import argparse
@@ -80,7 +79,7 @@ from .lcov import rate
 from .genpng import gen_png
 from .util import reverse_dict
 from .util import apply_config
-from .util import system_no_output
+from .util import system_no_output, NO_ERROR
 from .util import get_date_string
 from .util import strip_spaces_in_options
 from .util import warn, die
@@ -430,7 +429,7 @@ if $frames:
 
 # Ensure that the c++filt tool is available when using --demangle-cpp
 if options.demangle_cpp:
-    if system_no_output(3, options.demangle_cpp_tool, "--version") != NO_ERROR:
+    if system_no_output(3, options.demangle_cpp_tool, "--version")[0] != NO_ERROR:
         die(f"ERROR: could not find {options.demangle_cpp_tool} tool needed for "
             "--demangle-cpp")
 
@@ -1131,11 +1130,11 @@ def read_info_file($tracefile) -> Dict[???, ???]:
     # Check for .gz extension
     if $tracefile =~ /\.gz$/:
         # Check for availability of GZIP tool
-        if system_no_output(1, "gunzip" ,"-h") != NO_ERROR:
+        if system_no_output(1, "gunzip" ,"-h")[0] != NO_ERROR:
             die("ERROR: gunzip command not available!")
 
         # Check integrity of compressed file
-        if system_no_output(1, "gunzip", "-t", str(tracefile)) != NO_ERROR:
+        if system_no_output(1, "gunzip", "-t", str(tracefile))[0] != NO_ERROR:
             die(f"ERROR: integrity check failed for compressed file {tracefile}!")
 
         # Open compressed file

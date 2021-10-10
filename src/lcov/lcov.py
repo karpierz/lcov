@@ -48,10 +48,10 @@ lcov
 #use File::Path;
 #use File::Find;
 #use File::Temp qw /tempdir/;
-#use File::Spec::Functions qw /abs2rel canonpath catdir catpath
+#use File::Spec::Functions qw /abs2rel catdir catpath
 #                  file_name_is_absolute rootdir splitdir splitpath/;
 #use Getopt::Long;
-#use Cwd qw /abs_path/;
+#use Cwd qw //;
 
 from typing import List, Dict, Optional
 import argparse
@@ -64,7 +64,7 @@ from .util import reverse_dict
 from .util import write_file
 from .util import apply_config
 from .util import transform_pattern
-from .util import system_no_output
+from .util import system_no_output, NO_ERROR
 from .util import strip_spaces_in_options
 from .util import warn, die
 
@@ -551,8 +551,8 @@ def lcov_copy(path_from: Path, path_to: Path, subdirs: List[object]):
 # NOK
 def lcov_copy_fn(path_from: Path, $rel, path_to: Path):
     """Copy directories, files and links from/rel to to/rel."""
-    abs_from = Path(canonpath(path_from/rel))
-    abs_to   = Path(canonpath(path_to/rel))
+    abs_from = Path(os.path.normpath(path_from/rel))
+    abs_to   = Path(os.path.normpath(path_to/rel))
 
     if (-d):
         if (not -d $abs_to):
@@ -669,7 +669,7 @@ def get_package(package_file: Path) -> Tuple[Path, Optional[Path], Optional[int]
         my $gkv;
         info(f"Reading package {package_file}:")
 
-        $package_file = abs_path(str(package_file))
+        $package_file = str(package_file.resolve())
 
         os.chdir(dir)
         try:
@@ -765,7 +765,7 @@ def create_package(package_file: Path, dir: Path, build: Optional[Path],
             info("  content type .........: application data")
 
         # Create package
-        package_file = Path(abs_path(str(package_file))) # NOK
+        package_file = package_file.resolve() # NOK
         os.chdir(dir)
         try:
             subprocess.run(["tar", "cfz", str(package_file), "."],
@@ -963,8 +963,8 @@ def link_data(targetdatadir: Path, targetgraphdir: Path, *, create: bool):
     # If CREATE is non-zero, create symbolic links in GRAPHDIR for
     # data files found in DATADIR. Otherwise remove link in GRAPHDIR.
 
-    targetdatadir  = Path(abs_path(str(targetdatadir)))  # NOK
-    targetgraphdir = Path(abs_path(str(targetgraphdir))) # NOK
+    targetdatadir  = targetdatadir.resolve()
+    targetgraphdir = targetgraphdir.resolve()
 
     op_data_cb = link_data_cb if create else unlink_data_cb,
     lcov_find(targetdatadir, op_data_cb, targetgraphdir, [r"\.gcda$", r"\.da$"])
@@ -1174,12 +1174,12 @@ def read_info_file($tracefile) -> Dict[str, Dict[str, object]]:
     # Check for .gz extension
     if ($_[0] =~ /\.gz$/):
         # Check for availability of GZIP tool
-        system_no_output(1, "gunzip" ,"-h")
-            and die("ERROR: gunzip command not available!")
+        if system_no_output(1, "gunzip" ,"-h")[0] != NO_ERROR:
+            die("ERROR: gunzip command not available!")
 
         # Check integrity of compressed file
-        system_no_output(1, "gunzip", "-t", $_[0])
-            and die("ERROR: integrity check failed for ".
+        if system_no_output(1, "gunzip", "-t", $_[0])[0] != NO_ERROR:
+            die("ERROR: integrity check failed for "
                 "compressed file $_[0]!")
 
         # Open compressed file
@@ -2469,15 +2469,11 @@ def read_diff(diff_file: Path) -> Tuple[Dict[str, Dict[int, int]], Dict[str, str
     # Check for .gz extension
     if $diff_file =~ /\.gz$/:
         # Check for availability of GZIP tool
-        try:
-            system_no_output(1, "gunzip", "-h")
-        except:
-            and die("ERROR: gunzip command not available!")
+        if system_no_output(1, "gunzip", "-h")[0] != NO_ERROR:
+            die("ERROR: gunzip command not available!")
         # Check integrity of compressed file
-        try:
-            system_no_output(1, "gunzip", "-t", str(diff_file))
-        except:
-            and die(f"ERROR: integrity check failed for compressed file {diff_file}!")
+        if system_no_output(1, "gunzip", "-t", str(diff_file))[0] != NO_ERROR:
+            die(f"ERROR: integrity check failed for compressed file {diff_file}!")
         # Open compressed file
         try:
             fhandle = open("-|", "gunzip -c 'str(diff_file)'")
@@ -2821,7 +2817,7 @@ def setup_gkv_sys():
 
 
 def setup_gkv_proc():
-    if (system_no_output(3, "modprobe", "gcov_proc")):
+    if system_no_output(3,  "modprobe", "gcov_proc") != NO_ERROR:
         system_no_output(3, "modprobe", "gcov_prof")
 
 
