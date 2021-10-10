@@ -103,11 +103,11 @@ args.diff:              Optional[str] = None   # If set, modifies tracefile acco
 args.reset:             bool = False           # If set, reset all coverage data to zero
 args.capture:           bool = False           # If set, capture data
 args.output_filename:   Optional[str] = None   # Name for file to write coverage data to
-args.test_name: str = ""    # Test case name
+args.test_name:         str = ""               # Test case name
 args.quiet:             bool = False           # If set, suppress information messages
 our $help;        # Help option flag
-our $version;        # Version option flag
-args.convert_filenames: bool =  False          # If set, convert filenames when applying diff
+args.version:           bool = False           # Version option flag
+args.convert_filenames: bool = False           # If set, convert filenames when applying diff
 args.strip:             Optional[int] = None   # If set, strip leading directories when applying diff
 our $temp_dir_name;    # Name of temporary directory
 args.follow:            bool =  False          # If set, indicates that find shall follow links
@@ -201,7 +201,7 @@ if (!GetOptions(
         "zerocounters|z"       => \args.reset,
         "quiet|q"              => \args.quiet,
         "help|h|?"             => \$help,
-        "version|v"            => \$version,
+        "version|v"            => \args.version,
         "follow|f"             => \args.follow,
         "path=s"               => \$diff_path,
         "base-directory|b=s"   => \Path(args.base_directory),
@@ -252,7 +252,7 @@ if $help:
     sys.exit(0)
 
 # Check for version option
-if $version:
+if args.version:
     print(f"{tool_name}: {lcov_version}")
     sys.exit(0)
 
@@ -349,14 +349,11 @@ else:
 sys.exit($exit_code)
 
 
-# NOK
-def print_usage(*HANDLE):
-    # print_usage(handle)
-    #
-    # Print usage information.
-
-    print(HANDLE <<END_OF_USAGE);
-Usage: $tool_name [OPTIONS]
+def print_usage(fhandle):
+    """Print usage information."""
+    global tool_name, lcov_url
+    print(f"""\
+Usage: {tool_name} [OPTIONS]
 
 Use lcov to collect coverage data from either the currently running Linux
 kernel or from a user space application. Specify the --directory option to
@@ -407,8 +404,7 @@ Options:
       --fail-under-lines MIN      Exit with a status of 1 if the total line
                                   coverage is less than MIN (summary option).
 
-For more information see: $lcov_url
-END_OF_USAGE
+For more information see: {lcov_url}""", file=fhandle)
 
 
 def check_options():
@@ -713,15 +709,15 @@ def get_package(package_file: Path) -> Tuple[Path, Optional[Path], Optional[int]
 def count_package_data(filename: Path) -> Optional[int]:
     """Count the number of coverage data files in the specified package file."""
     try:
-        fhandle = open(f"tar tfz '{filename}'", "-|") # NOK
+        tar_process = subprocess.run(["tar", "tfz", f"'{filename}'"],
+                                     capture_output=True, encoding="utf-8",
+                                     check=True)
     except:
         return None
     count = 0
-    with fhandle:
-        for line in fhandle:
-            line = line.rstrip()
-            if any(line.endswith(ext) for ext in (".da", ".gcda")):
-                count += 1
+    for line in tar_process.stdout.splitlines():
+        if any(line.endswith(ext) for ext in (".da", ".gcda")):
+            count += 1
     return count
 
 
@@ -771,8 +767,11 @@ def create_package(package_file: Path, dir: Path, build: Optional[Path],
         # Create package
         package_file = Path(abs_path(str(package_file))) # NOK
         os.chdir(dir)
-        system("tar cfz {package_file} .")
-            and die(f"ERROR: could not create package {package_file}")
+        try:
+            subprocess.run(["tar", "cfz", str(package_file), "."],
+                           check=True)
+        except:
+            die(f"ERROR: could not create package {package_file}")
     finally:
         os.chdir(cwd)
 

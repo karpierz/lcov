@@ -147,7 +147,6 @@ BR_VEC_MAX     = vec(pack("b*", 1 x $BR_VEC_WIDTH), 0, BR_VEC_WIDTH)
 UNNAMED_BLOCK = -1
 
 # Prototypes
-sub print_usage(*);
 sub match_filename($@);
 sub read_gcov_file($);
 sub version_to_str($);
@@ -477,13 +476,11 @@ info("Finished .info-file creation")
 
 sys.exit(0)
 
-# NOK
-def print_usage(*HANDLE):
-    # print_usage(handle)
-    #
-    # Print usage information.
 
-    print(HANDLE f"""
+def print_usage(fhandle):
+    """Print usage information."""
+    global tool_name, lcov_url
+    print(f"""\
 Usage: {tool_name} [OPTIONS] DIRECTORY
 
 Traverse DIRECTORY and create a .info file for each data file found. Note
@@ -512,8 +509,7 @@ sequentially.
       --include PATTERN             Include files matching PATTERN
       --exclude PATTERN             Exclude files matching PATTERN
 
-For more information see: {lcov_url}
-""")
+For more information see: {lcov_url}""", file=fhandle)
 
 # NOK
 def gen_info(directory: str):

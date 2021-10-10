@@ -103,14 +103,12 @@ our $default_precision = 1;
 # For line coverage/all coverage types if not specified
 options.hi_limit:  int = 90
 options.med_limit: int = 75
-
 # For function coverage
-our $fn_hi_limit;
-our $fn_med_limit;
-
+options.fn_hi_limit:  Optional[int] = None
+options.fn_med_limit: Optional[int] = None
 # For branch coverage
-our $br_hi_limit;
-our $br_med_limit;
+options.br_hi_limit:  Optional[int] = None
+options.br_med_limit: Optional[int] = None
 
 # Width of overview image
 options.overview_width = 80
@@ -174,7 +172,6 @@ ERROR_ID = {
 }
 
 # Data related prototypes
-sub print_usage(*);
 sub process_dir($);
 sub get_prefix($@);
 
@@ -185,7 +182,6 @@ sub write_test_table_entry(*$$);
 sub write_test_table_epilog(*);
 
 sub write_frameset(*$$$);
-sub write_overview(*$$$$);
 
 # Global variables & initialization
 our %info_data;        # Hash containing all data from .info file
@@ -199,18 +195,18 @@ args.test_title: Optional[str] = None  # Title for output as written to each pag
 our $output_directory;    # Name of directory in which to store output
 our $base_filename;    # Optional name of file containing baseline data
 our $desc_filename;    # Name of file containing test descriptions
-our $css_filename;    # Optional name of external stylesheet file to use
+options.css_filename: Optional[Path] = None  # Optional name of external stylesheet file to use
 args.quiet: bool = False  # If set, suppress information messages
 our $help;        # Help option flag
 our $version;        # Version option flag
-our $show_details;    # If set, generate detailed directory view
-our $no_prefix;        # If set, do not remove filename prefix
-options.fn_coverage: Optionsl[bool] = None  # If set, generate function coverage statistics
-our $no_fn_coverage;    # Disable fn_coverage
-options.br_coverage: Optionsl[bool] = None  # If set, generate branch coverage statistics
-our $no_br_coverage;    # Disable br_coverage
+options.show_details: bool = False  # If set, generate detailed directory view
+options.no_prefix:    bool = False  # If set, do not remove filename prefix
+options.fn_coverage:     Optionsl[bool] = None  # If set, generate function coverage statistics
+options.no_fn_coverage:  Optionsl[bool] = None  # Disable fn_coverage
+options.br_coverage:     Optionsl[bool] = None  # If set, generate branch coverage statistics
+options.no_br_coverage:  Optionsl[bool] = None  # Disable br_coverage
 options.sort = True      # If set, provide directory listings with sorted entries
-our $no_sort;        # Disable sort
+$no_sort;        # Disable sort
 our $frames;        # If set, use frames for source code view
 our $keep_descriptions;    # If set, do not remove unused test case descriptions
 options.no_sourceview: bool = False  # If set, do not create a source code view for each file
@@ -222,11 +218,11 @@ options.html_prolog_file: Optional[Path] = None  # Custom HTML prolog file (up t
 options.html_epilog_file: Optional[Path] = None  # Custom HTML epilog file (from </body> onwards)
 html_prolog: Optional[str] = None  # Actual HTML prolog
 html_epilog: Optional[str] = None  # Actual HTML epilog
-options.html_ext = "html"  # Extension for generated HTML files
+options.html_ext:  str  = "html"   # Extension for generated HTML files
 options.html_gzip: bool = False    # Compress with gzip
 options.demangle_cpp = False  # Demangle C++ function names
-options.demangle_cpp_tool   = "c++filt"  # Default demangler for C++ function names
-options.demangle_cpp_params = ""         # Extra parameters for demangling
+options.demangle_cpp_tool:   str = "c++filt"  # Default demangler for C++ function names
+options.demangle_cpp_params: str = ""         # Extra parameters for demangling
 our @opt_ignore_errors;    # Ignore certain error classes during processing
 our @ignore;
 our $opt_config_file;    # User-specified configuration file location
@@ -244,7 +240,7 @@ options.lcov_function_coverage: bool = True
 options.lcov_branch_coverage:   bool = False
 options.rc_desc_html:           bool = False  # lcovrc: genhtml_desc_html
 
-$cwd = Path.cwd()  # Current working directory
+cwd = Path.cwd()  # Current working directory
 
 #
 # Code entry point
@@ -265,7 +261,7 @@ if $config or %opt_rc:
 {
     # Copy configuration file and --rc values to variables
     apply_config({
-        "genhtml_css_file"            => \$css_filename,
+        "genhtml_css_file"            => \Path(options.css_filename),
         "genhtml_hi_limit"            => \options.hi_limit,
         "genhtml_med_limit"           => \options.med_limit,
         "genhtml_line_field_width"    => \options.line_field_width,
@@ -273,7 +269,7 @@ if $config or %opt_rc:
         "genhtml_nav_resolution"      => \options.nav_resolution,
         "genhtml_nav_offset"          => \options.nav_offset,
         "genhtml_keep_descriptions"   => \$keep_descriptions,
-        "genhtml_no_prefix"           => \$no_prefix,
+        "genhtml_no_prefix"           => \options.no_prefix,
         "genhtml_no_source"           => \options.no_sourceview,
         "genhtml_num_spaces"          => \$tab_size,
         "genhtml_highlight"           => \options.highlight,
@@ -283,10 +279,10 @@ if $config or %opt_rc:
         "genhtml_html_extension"      => \options.html_ext,
         "genhtml_html_gzip"           => \options.html_gzip,
         "genhtml_precision"           => \$default_precision,
-        "genhtml_function_hi_limit"   => \$fn_hi_limit,
-        "genhtml_function_med_limit"  => \$fn_med_limit,
-        "genhtml_branch_hi_limit"     => \$br_hi_limit,
-        "genhtml_branch_med_limit"    => \$br_med_limit,
+        "genhtml_function_hi_limit"   => \options.fn_hi_limit,
+        "genhtml_function_med_limit"  => \options.fn_med_limit,
+        "genhtml_branch_hi_limit"     => \options.br_hi_limit,
+        "genhtml_branch_med_limit"    => \options.br_med_limit,
         "genhtml_branch_field_width"  => \options.br_field_width,
         "genhtml_sort"                => \options.sort,
         "genhtml_charset"             => \$charset,
@@ -304,12 +300,12 @@ if $config or %opt_rc:
 }
 
 # Copy related values if not specified
-if ! defined($fn_hi_limit):  $fn_hi_limit  = options.hi_limit              
-if ! defined($fn_med_limit): $fn_med_limit = options.med_limit             
-if ! defined($br_hi_limit):  $br_hi_limit  = options.hi_limit              
-if ! defined($br_med_limit): $br_med_limit = options.med_limit             
-if options.fn_coverage is None:  options.fn_coverage = options.lcov_function_coverage
-if options.br_coverage is None:  options.br_coverage = options.lcov_branch_coverage  
+if options.fn_hi_limit  is None: options.fn_hi_limit  = options.hi_limit              
+if options.fn_med_limit is None: options.fn_med_limit = options.med_limit             
+if options.br_hi_limit  is None: options.br_hi_limit  = options.hi_limit              
+if options.br_med_limit is None: options.br_med_limit = options.med_limit             
+if options.fn_coverage  is None: options.fn_coverage  = options.lcov_function_coverage
+if options.br_coverage  is None: options.br_coverage  = options.lcov_branch_coverage  
 
 # Parse command line options
 if (!GetOptions(
@@ -317,13 +313,13 @@ if (!GetOptions(
         "title|t=s"            => \args.test_title,
         "description-file|d=s" => \$desc_filename,
         "keep-descriptions|k"  => \$keep_descriptions,
-        "css-file|c=s"         => \$css_filename,
+        "css-file|c=s"         => \Path(options.css_filename),
         "baseline-file|b=s"    => \$base_filename,
         "prefix|p=s"           => \@opt_dir_prefix,
         "num-spaces=i"         => \$tab_size,
-        "no-prefix"            => \$no_prefix,
+        "no-prefix"            => \options.no_prefix,
         "no-sourceview"        => \options.no_sourceview,
-        "show-details|s"       => \$show_details,
+        "show-details|s"       => \options.show_details,
         "frames|f"             => \$frames,
         "highlight"            => \options.highlight,
         "legend"               => \$legend,
@@ -335,11 +331,11 @@ if (!GetOptions(
         "html-extension=s"     => \options.html_ext,
         "html-gzip"            => \options.html_gzip,
         "function-coverage"    => \options.fn_coverage,
-        "no-function-coverage" => \$no_fn_coverage,
+        "no-function-coverage" => \options.no_fn_coverage,
         "branch-coverage"      => \options.br_coverage,
-        "no-branch-coverage"   => \$no_br_coverage,
+        "no-branch-coverage"   => \options.no_br_coverage,
         "sort"                 => \options.sort,
-        "no-sort"              => \$no_sort,
+        "no-sort"              => \options.no_sort,
         "demangle-cpp"         => \options.demangle_cpp,
         "ignore-errors=s"      => \@opt_ignore_errors,
         "config-file=s"        => \$opt_config_file,
@@ -347,18 +343,16 @@ if (!GetOptions(
         "precision=i"          => \$default_precision,
         "missed"               => \options.missed,
         "dark-mode"            => \options.dark_mode,
-        ))
-{
+        )):
     print(f"Use {tool_name} --help to get usage information", file=sys.stderr)
     sys.exit(1)
-}
 
 # Merge options
-if $no_fn_coverage:
+if options.no_fn_coverage:
     options.fn_coverage = False
-if $no_br_coverage:
+if options.no_br_coverage:
     options.br_coverage = False
-if $no_sort:
+if options.no_sort:
     options.sort = False
 
 info_filenames = @ARGV;
@@ -395,9 +389,9 @@ if not args.test_title:
 
 # Make sure css_filename is an absolute path (in case we're changing
 # directories)
-if $css_filename:
-    if ! ($css_filename =~ /^\/(.*)$/):
-        $css_filename = $cwd."/".$css_filename;
+if options.css_filename is not None:
+    if not (str(options.css_filename) =~ /^\/(.*)$/):
+        options.css_filename = cwd/options.css_filename
 
 # Make sure tab_size is within valid range
 if $tab_size < 1:
@@ -415,7 +409,7 @@ if options.no_sourceview and defined($frames):
     $frames = None
 
 # Issue a warning if --no-prefix is enabled together with --prefix
-if $no_prefix and @dir_prefix:
+if options.no_prefix and @dir_prefix:
     warn("WARNING: option --prefix disabled because --no-prefix was "
          "specified!")
     @dir_prefix = None
@@ -453,14 +447,11 @@ gen_html()
 
 sys.exit(0)
 
-# NOK
-def print_usage(HANDLE):
-    #
-    # print_usage(handle)
-    #
-    # Print usage information.
 
-    print(HANDLE <<END_OF_USAGE);f"""
+def print_usage(fhandle):
+    """Print usage information."""
+    global tool_name, lcov_url
+    print(f"""\
 Usage: {tool_name} [OPTIONS] INFOFILE(S)
 
 Create HTML output for coverage data found in INFOFILE. Note that INFOFILE
@@ -503,8 +494,7 @@ HTML output:
       --missed                      Show miss counts as negative numbers
       --dark-mode                   Use the dark-mode CSS
 
-For more information see: $lcov_url
-""" END_OF_USAGE
+For more information see: {lcov_url}""", file=fhandle)
 
 # NOK
 def gen_html():
@@ -546,18 +536,18 @@ def gen_html():
 
         dir_list: List[str] = get_dir_list(%info_data.keys())
 
-        if $no_prefix:
+        if options.no_prefix:
             # User requested that we leave filenames alone
             info("User asked not to remove filename prefix")
         elif not @dir_prefix:
             # Get prefix common to most directories in list
-            prefix = get_prefix(1, keys(%info_data))
+            prefix = get_prefix(1, %info_data.keys())
             if prefix:
                 info(f"Found common filename prefix \"{prefix}\"")
                 $dir_prefix[0] = prefix
             else:
                 info("No common filename prefix found!")
-                $no_prefix = 1
+                options.no_prefix = True
         else:
             msg = "Using user-specified filename prefix "
             for $i in (0 .. $#dir_prefix):
@@ -609,7 +599,7 @@ def gen_html():
             # Handle files in root directory gracefully
             if dir_name == "": dir_name = "root"
             # Remove prefix if applicable
-            if not $no_prefix and @dir_prefix:
+            if not options.no_prefix and @dir_prefix:
                 # Match directory names beginning with one of @dir_prefix
                 dir_name = apply_prefix(dir_name, @dir_prefix)
 
@@ -706,7 +696,7 @@ def write_dir_page($name,
                      total_br_found, total_br_hit,
                      sort_type)
 
-        write_file_table(html_handle, $base_dir, overview,
+        write_file_table(html_handle, Path($base_dir), overview,
                          $testhash, $testfnchash, $testbrhash,
                          header_type != HDR_DIR, sort_type);
 
@@ -737,7 +727,7 @@ def process_dir(abs_dir):
 
     rel_dir = $abs_dir
     # Remove prefix if applicable
-    if ! $no_prefix:
+    if not options.no_prefix:
         # Match directory name beginning with one of @dir_prefix
         rel_dir = apply_prefix(rel_dir, @dir_prefix)
 
@@ -812,7 +802,7 @@ def process_dir(abs_dir):
                        \%overview,
                        {}, {}, {},
                        1, $_)
-        if not $show_details: continue
+        if not options.show_details: continue
         # Generate directory overview page including details
         write_dir_page(f"-detail{fileview_sortname[$_]}",
                        Path($rel_dir), Path($base_dir), args.test_title, Path(trunc_dir),
@@ -894,7 +884,7 @@ def process_file($trunc_dir, $rel_dir, $filename) -> Tuple ???:
                                 line)
 
     # Additional files are needed in case of frame output
-    if ! $frames:
+    if not $frames:
         return (ln_found, ln_hit,
                 fn_found, fn_hit,
                 br_found, br_hit,
@@ -910,7 +900,7 @@ def process_file($trunc_dir, $rel_dir, $filename) -> Tuple ???:
 
     # Write overview frame
     with html_create(Path(f"$rel_dir/$base_name.gcov.overview.{options.html_ext}")) as html_handle:
-        write_overview(html_handle, $base_dir, base_name, page_title, len(@source))
+        write_overview(html_handle, Path($base_dir), base_name, page_title, len(@source))
 
     return (ln_found, ln_hit,
             fn_found, fn_hit,
@@ -1120,7 +1110,6 @@ def read_info_file($tracefile) -> Dict[???, ???]:
     my $testbrcount;
     my $sumbrcount;
     my $line;            # Current line read from .info file
-    my $testname;            # Current test name
     my $filename;            # Current filename
     my $count;            # Execution count of current line
     my $negative;            # If set, warn about negative counts
@@ -1129,13 +1118,13 @@ def read_info_file($tracefile) -> Dict[???, ???]:
 
     notified_about_relative_paths = False
 
-    info(f"Reading data file $tracefile")
+    info(f"Reading data file {tracefile}")
 
     # Check if file exists and is readable
-    if not os.access($tracefile, os.R_OK):
+    if not os.access(tracefile, os.R_OK):
         die(f"ERROR: cannot read file {tracefile}!")
     # Check if this is really a plain file
-    fstatus = Path($tracefile).stat()
+    fstatus = Path(tracefile).stat()
     if ! (-f _):
         die(f"ERROR: not a plain file: {tracefile}!")
 
@@ -1146,7 +1135,7 @@ def read_info_file($tracefile) -> Dict[???, ???]:
             die("ERROR: gunzip command not available!")
 
         # Check integrity of compressed file
-        if system_no_output(1, "gunzip", "-t", $tracefile) != NO_ERROR:
+        if system_no_output(1, "gunzip", "-t", str(tracefile)) != NO_ERROR:
             die(f"ERROR: integrity check failed for compressed file {tracefile}!")
 
         # Open compressed file
@@ -1155,11 +1144,11 @@ def read_info_file($tracefile) -> Dict[???, ???]:
     else:
         # Open decompressed file
         try:
-            INFO_HANDLE = Path($tracefile).open("rt")
+            INFO_HANDLE = Path(tracefile).open("rt")
         except:
             or die(f"ERROR: cannot read file {tracefile}!")
 
-    $testname = ""
+    testname = ""  # Current test name
     with INFO_HANDLE:
         while (<INFO_HANDLE>)
         {
@@ -1171,13 +1160,13 @@ def read_info_file($tracefile) -> Dict[???, ???]:
                 /^TN:([^,]*)(,diff)?/ && do
                 {
                     # Test name information found
-                    $testname = defined($1) ? $1 : "";
-                    if ($testname =~ s/\W/_/g)
+                    testname = defined($1) ? $1 : "";
+                    if testname =~ s/\W/_/g:
                     {
                         $changed_testname = 1;
                     }
                     if (defined($2)):
-                        $testname += $2
+                        testname += $2
 
                     last;
                 };
@@ -1186,7 +1175,7 @@ def read_info_file($tracefile) -> Dict[???, ???]:
                 {
                     # Filename information found
                     # Retrieve data for new entry
-                    $filename = File::Spec->rel2abs($1, $cwd)
+                    $filename = File::Spec->rel2abs($1, str(cwd))
 
                     if (!File::Spec->file_name_is_absolute($1) and
                         not notified_about_relative_paths):
@@ -1201,9 +1190,9 @@ def read_info_file($tracefile) -> Dict[???, ???]:
                      _, _, _, _, _, _) = get_info_entry($data)
 
                     if defined($testname):
-                        $testcount    = $testdata[$testname]
-                        $testfnccount = testfncdata[$testname]
-                        $testbrcount  = $testbrdata[$testname]
+                        $testcount    = $testdata[testname]
+                        $testfnccount = testfncdata[testname]
+                        $testbrcount  = $testbrdata[testname]
                     else:
                         $testcount    = {}
                         $testfnccount = {}
@@ -1326,50 +1315,50 @@ def read_info_file($tracefile) -> Dict[???, ???]:
     for filename in list(result.keys()):
         data = result[filename]
 
-        ($testdata,   $sumcount, _, _,
-         testfncdata, $sumfnccount,
-         $testbrdata, $sumbrcount,
+        (testdata,   sumcount, _, _,
+         testfncdata, sumfnccount,
+         $testbrdata, sumbrcount,
          _, _, _, _, _, _) = get_info_entry(data)
 
         # Filter out empty files
-        if len(%{$sumcount}) == 0:
+        if len(sumcount) == 0:
             del result[filename]
             continue
 
         # Filter out empty test cases
-        for testname in keys(%{$testdata}):
-            if (!defined($testdata[$testname]) or
+        for testname in keys(%{testdata}):
+            if (!defined(testdata[testname]) or
                 len(%{testdata[testname]}) == 0):
                 delete(testdata[testname])
                 delete(testfncdata[testname])
 
-        data["found"] = len(%{$sumcount});
+        data["found"] = len(sumcount)
         hitcount = 0
-        foreach (keys(%{$sumcount})):
-            if ($sumcount->{$_} > 0):
+        foreach (keys(%{sumcount})):
+            if sumcount->{$_} > 0:
                 hitcount += 1
         data["hit"] = hitcount
 
         # Get found/hit values for function call data
-        data["f_found"] = len($sumfnccount)
+        data["f_found"] = len(sumfnccount)
         hitcount = 0
-        foreach (keys(%{$sumfnccount})):
-            if ($sumfnccount->{$_} > 0):
+        foreach (keys(%{sumfnccount})):
+            if sumfnccount->{$_} > 0:
                 hitcount += 1
         data["f_hit"] = hitcount
 
         # Combine branch data for the same branches
-        _, data["b_found"], data["b_hit"] = compress_brcount($sumbrcount)
+        _, data["b_found"], data["b_hit"] = compress_brcount(sumbrcount)
         for brcount in $testbrdata.values():
             compress_brcount(brcount)
 
     if len(keys(%result)) == 0:
-        die(f"ERROR: no valid records found in tracefile $tracefile")
+        die(f"ERROR: no valid records found in tracefile {tracefile}")
     if $negative:
-        warn(f"WARNING: negative counts found in tracefile $tracefile")
+        warn(f"WARNING: negative counts found in tracefile {tracefile}")
     if $changed_testname:
         warn("WARNING: invalid characters removed from testname in "
-             f"tracefile $tracefile")
+             f"tracefile {tracefile}")
 
     return (\%result)
 
@@ -1796,10 +1785,10 @@ def write_css_file():
     global options
 
     # Check for a specified external style sheet file
-    if $css_filename:
+    if options.css_filename is not None:
         # Simply copy that file
         try:
-            system("cp", $css_filename, "gcov.css")
+            system("cp", str(options.css_filename), "gcov.css")
         except:
             die(f"ERROR: cannot copy file {css_filename}!")
         return;
@@ -2022,10 +2011,11 @@ def write_frameset(html_handle, basedir: str, basename: str, pagetitle: str):
 END_OF_HTML
 
 # NOK
-def write_overview(html_handle, basedir, basename, pagetitle: str, lines: int   *$$$$):
+def write_overview(html_handle, basedir: Path, basename, pagetitle: str, lines: int   *$$$$):
     """ """
     global options
 
+    basedir = basedir.as_posix()
     max_line = lines - 1
 
     write_html(html_handle, <<END_OF_HTML) # NOK
@@ -2048,12 +2038,9 @@ END_OF_HTML
     offset = sprintf("%d", offset ) * options.nav_resolution
 
     # Create image map for overview image
-    for (index = 1; index <= lines; index += options.nav_resolution):
+    for index in range(1, lines + 1, options.nav_resolution):
         # Enforce nav_offset
-        if index < offset + 1:
-            write_overview_line(html_handle, basename, index, 1)
-        else:
-            write_overview_line(html_handle, basename, index, index - offset)
+        write_overview_line(html_handle, basename, index, max(1, index - offset))
 
     write_html(html_handle, <<END_OF_HTML) # NOK
       </map>
@@ -2066,17 +2053,20 @@ END_OF_HTML
     </html>
 END_OF_HTML
 
-# NOK
-def write_overview_line(html_handle, basename: str, line: int, link):
+
+def write_overview_line(html_handle, base_name: str, line: int, link_no: int):
     """ """
     global options 
 
+    x1 = 0
     y1 = line - 1
-    y2 = y1 + options.nav_resolution - 1
     x2 = options.overview_width - 1
+    y2 = y1 + options.nav_resolution - 1
+    basename = base_name
+    link = str(link_no)
 
-    write_html(html_handle, <<END_OF_HTML)
-        <area shape="rect" coords="0,$y1,$x2,$y2" href="{basename}.gcov.{options.html_ext}#$_[3]" target="source" alt="overview">
+    write_html(html_handle, <<END_OF_HTML) # NOK
+        <area shape="rect" coords="{x1},{y1},{x2},{y2}" href="{basename}.gcov.{options.html_ext}#{link}" target="source" alt="overview">
 END_OF_HTML
 
 # NOK
@@ -2233,7 +2223,7 @@ END_OF_HTML
     # Function coverage
     if options.fn_coverage:
         $style = $rate_name[classify_rate($fn_found, $fn_hit,
-                                          $fn_med_limit, $fn_hi_limit)];
+                                          options.fn_med_limit, options.fn_hi_limit)];
         $rate = rate($fn_hit, $fn_found, " %")
         if header_type != HDR_TESTDESC;
             row_right.append([[_, "headerItem", "Functions:"],
@@ -2243,7 +2233,7 @@ END_OF_HTML
     # Branch coverage
     if options.br_coverage:
         $style = $rate_name[classify_rate($br_found, $br_hit,
-                                          $br_med_limit, $br_hi_limit)];
+                                          options.br_med_limit, options.br_hi_limit)];
         $rate = rate($br_hit, $br_found, " %")
         if header_type != HDR_TESTDESC:
             row_right.append([[_, "headerItem", "Branches:"],
@@ -2289,7 +2279,7 @@ def get_sort_code(sort_link: Optional[str], alt: str, $base_dir: Path):
 
 # NOK
 def write_file_table(html_handle,
-                     base_dir,
+                     base_dir: Path,
                      overview: Dict[str, List],
                      testhash,
                      testfnchash, 
@@ -2313,38 +2303,32 @@ def write_file_table(html_handle,
     global options
     global test_description
 
-    my $testname;
     my %affecting_tests;
 
     # Determine HTML code for column headings
-    if $base_dir != "" and $show_details:
-        my $detailed = keys(%{$testhash});
-        view_type = HEAD_DETAIL_HIDDEN if $detailed else HEAD_NO_DETAIL
-
-        file_code = get_file_code(view_type,
-                                   "Filename" if fileview else "Directory",
-                                   options.sort and sort_type != SORT_FILE,
-                                   Path($base_dir))
-        line_code = get_line_code(HEAD_DETAIL_SHOWN if $detailed else HEAD_DETAIL_HIDDEN,
-                                   sort_type, "Line Coverage",
-                                   options.sort and sort_type != SORT_LINE,
-                                   Path($base_dir))
+    if $base_dir != "" and options.show_details:
+        detailed = bool($testhash)
+        view_type      = HEAD_DETAIL_HIDDEN if detailed else HEAD_NO_DETAIL
+        line_view_type = HEAD_DETAIL_SHOWN  if detailed else HEAD_DETAIL_HIDDEN
     else:
-        view_type = HEAD_NO_DETAIL
-        file_code = get_file_code(view_type, "Filename" if fileview else "Directory",
-                                   options.sort and sort_type != SORT_FILE,
-                                   Path($base_dir))
-        line_code = get_line_code(view_type, sort_type, "Line Coverage",
-                                   options.sort and sort_type != SORT_LINE,
-                                   Path($base_dir))
+        view_type = line_view_type = HEAD_NO_DETAIL
+
+    file_code = get_file_code(view_type,
+                              "Filename" if fileview else "Directory",
+                              options.sort and sort_type != SORT_FILE,
+                              base_dir)
+    line_code = get_line_code(line_view_type, sort_type,
+                              "Line Coverage",
+                              options.sort and sort_type != SORT_LINE,
+                              base_dir)
     func_code = get_func_code(view_type,
-                               "Functions",
-                               options.sort and sort_type != SORT_FUNC,
-                               Path($base_dir))
+                              "Functions",
+                              options.sort and sort_type != SORT_FUNC,
+                              base_dir)
     bran_code = get_bran_code(view_type,
-                               "Branches",
-                               options.sort and sort_type != SORT_BRANCH,
-                               Path($base_dir))
+                              "Branches",
+                              options.sort and sort_type != SORT_BRANCH,
+                              base_dir)
 
     head_columns = []
     push(head_columns, [ line_code, 3])
@@ -2361,7 +2345,7 @@ def write_file_table(html_handle,
         testfncdata = $testfnchash[filename]
         testbrdata  = $testbrhash[filename]
 
-        ($found,    $hit,
+        (ln_found, ln_hit,
          fn_found, fn_hit,
          br_found, br_hit,
          page_link,
@@ -2369,27 +2353,27 @@ def write_file_table(html_handle,
 
         columns = []
         # Line coverage
-        columns.append(($found, $hit, options.med_limit, options.hi_limit, True))
+        columns.append((ln_found, ln_hit, options.med_limit, options.hi_limit, True))
         # Function coverage
         if options.fn_coverage:
-            columns.append(($fn_found, $fn_hit, $fn_med_limit, $fn_hi_limit, False))
+            columns.append((fn_found, fn_hit, options.fn_med_limit, options.fn_hi_limit, False))
         # Branch coverage
         if options.br_coverage:
-            columns.append(($br_found, $br_hit, $br_med_limit, $br_hi_limit, False))
-        write_file_table_entry(html_handle, Path($base_dir), filename, page_link, columns)
+            columns.append((br_found, br_hit, options.br_med_limit, options.br_hi_limit, False))
+        write_file_table_entry(html_handle, base_dir, filename, page_link, columns)
 
         # Check whether we should write test specific coverage
         # as well
-        if not ($show_details and testdata): continue
+        if not testdata or not options.show_details: continue
 
         # Filter out those tests that actually affect this file
         %affecting_tests = get_affecting_tests(testdata, testfncdata, testbrdata)
 
         # Does any of the tests affect this file at all?
-        if ! %affecting_tests: continue
+        if not %affecting_tests: continue
 
         for testname in keys(%affecting_tests):
-            $found, $hit, $fn_found, $fn_hit, $br_found, $br_hit = split(",", $affecting_tests[testname])
+            ln_found, ln_hit, fn_found, fn_hit, br_found, br_hit = $affecting_tests[testname].split(",")
 
             # Insert link to description of available
             if $test_description[testname]:
@@ -2397,9 +2381,9 @@ def write_file_table(html_handle,
                             f'{testname}</a>')
 
             results = []
-            results.append(($found, $hit))
-            if options.fn_coverage: results.append(($fn_found, $fn_hit))
-            if options.br_coverage: results.append(($br_found, $br_hit))
+            results.append((ln_found, ln_hit))
+            if options.fn_coverage: results.append((fn_found, fn_hit))
+            if options.br_coverage: results.append((br_found, br_hit))
             write_file_table_detail_entry(html_handle, testname, results)
 
     write_file_table_epilog(html_handle)
@@ -2485,10 +2469,9 @@ def get_bran_code(view_type: int, text: str, sort_button: bool, base_dir: Path):
 
     return result
 
-# NOK
+
 def write_file_table_prolog(html_handle, file_heading: str, columns: List[Tuple[str, int]]):
     """Write heading for file table."""
-    # write_file_table_prolog(handle, file_heading, [heading, num_cols, ...])
 
     if   len(columns) == 1: width = 20
     elif len(columns) == 2: width = 10
@@ -2496,39 +2479,44 @@ def write_file_table_prolog(html_handle, file_heading: str, columns: List[Tuple[
     else:                   width = 0
 
     num_columns = 0
-    for heading, cols in columns:
+    for _, cols in columns:
         num_columns += cols
 
     file_width = 100 - num_columns * width
 
     # Table definition
-    write_html(html_handle, <<END_OF_HTML)
+    write_html(html_handle, <<END_OF_HTML) # NOK
       <center>
       <table width="80%" cellpadding=1 cellspacing=1 border=0>
 
         <tr>
           <td width="{file_width}%"><br></td>
 END_OF_HTML
+
     # Empty first row
-    for heading, cols in columns:
+    for _, cols in columns:
         for _ in range(cols):
-            write_html(html_handle, <<END_OF_HTML)
+            write_html(html_handle, <<END_OF_HTML) # NOK
           <td width="{width}%"></td>
 END_OF_HTML
+
     # Next row
-    write_html(html_handle, <<END_OF_HTML)
+    write_html(html_handle, <<END_OF_HTML) # NOK
         </tr>
 
         <tr>
           <td class="tableHead">{file_heading}</td>
 END_OF_HTML
+
     # Heading row
     for heading, cols in columns:
         colspan = f" colspan={cols}" if cols > 1 else ""
-        write_html(html_handle, <<END_OF_HTML);
-          <td class="tableHead"{colspan}>$heading</td>
+
+        write_html(html_handle, <<END_OF_HTML) # NOK
+          <td class="tableHead"{colspan}>{heading}</td>
 END_OF_HTML
-    write_html(html_handle, <<END_OF_HTML);
+
+    write_html(html_handle, <<END_OF_HTML) # NOK
         </tr>
 END_OF_HTML
 
@@ -3249,7 +3237,7 @@ def remove_unused_descriptions():
              (before - after), after))
 
 
-def apply_prefix(filename, prefixes: List):
+def apply_prefix(filename, prefixes: List[str]):
     # If FILENAME begins with PREFIX from PREFIXES,
     # remove PREFIX from FILENAME and return resulting string,
     # otherwise return FILENAME.
