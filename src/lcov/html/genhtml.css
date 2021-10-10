@@ -173,7 +173,7 @@ td.coverFile
 {
   text-align: left;
   padding-left: 10px;
-  padding-right: 20px; 
+  padding-right: 20px;
   color: #COLOR_02;
   background-color: #COLOR_08;
   font-family: monospace;
@@ -300,7 +300,7 @@ td.testPer
 {
   text-align: right;
   padding-left: 10px;
-  padding-right: 10px; 
+  padding-right: 10px;
   background-color: #COLOR_08;
   font-family: sans-serif;
 }
@@ -310,7 +310,7 @@ td.testNum
 {
   text-align: right;
   padding-left: 10px;
-  padding-right: 10px; 
+  padding-right: 10px;
   background-color: #COLOR_08;
   font-family: sans-serif;
 }
@@ -337,7 +337,7 @@ td.coverFn
 {
   text-align: left;
   padding-left: 10px;
-  padding-right: 20px; 
+  padding-right: 20px;
   color: #COLOR_02;
   background-color: #COLOR_08;
   font-family: monospace;
@@ -414,10 +414,10 @@ span.coverLegendNoCov
 /* Source code view (function table): standard link - visited format */
 td.lineNoCov > a:visited,
 td.lineCov > a:visited
-{  
+{
   color: #COLOR_00;
   text-decoration: underline;
-}  
+}
 
 /* Source code view: format for lines which were executed only in a
    previous version */

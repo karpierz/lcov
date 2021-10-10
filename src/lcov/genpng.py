@@ -65,10 +65,10 @@ def genpng_process_file(filename: Path, out_filename: Path,
     gen_png(out_filename, False, width, tab_size, source)
 
 
-def gen_png(filename: Path,   # Filename for PNG file               
-            dark_mode: bool,  # dark-on-light, if set               
-            width: int,       # Imagewidth for image                
-            tab_size: int,    # Replacement string for tab signs    
+def gen_png(filename: Path,   # Filename for PNG file
+            dark_mode: bool,  # dark-on-light, if set
+            width: int,       # Imagewidth for image
+            tab_size: int,    # Replacement string for tab signs
             source: List):    # Source code as passed via argument 2
     # Write an overview PNG file to FILENAME.
     # Source code is defined by SOURCE which is a list of lines

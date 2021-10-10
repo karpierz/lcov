@@ -300,12 +300,12 @@ if $config or %opt_rc:
 }
 
 # Copy related values if not specified
-if options.fn_hi_limit  is None: options.fn_hi_limit  = options.hi_limit              
-if options.fn_med_limit is None: options.fn_med_limit = options.med_limit             
-if options.br_hi_limit  is None: options.br_hi_limit  = options.hi_limit              
-if options.br_med_limit is None: options.br_med_limit = options.med_limit             
+if options.fn_hi_limit  is None: options.fn_hi_limit  = options.hi_limit
+if options.fn_med_limit is None: options.fn_med_limit = options.med_limit
+if options.br_hi_limit  is None: options.br_hi_limit  = options.hi_limit
+if options.br_med_limit is None: options.br_med_limit = options.med_limit
 if options.fn_coverage  is None: options.fn_coverage  = options.lcov_function_coverage
-if options.br_coverage  is None: options.br_coverage  = options.lcov_branch_coverage  
+if options.br_coverage  is None: options.br_coverage  = options.lcov_branch_coverage
 
 # Parse command line options
 if (!GetOptions(
@@ -419,7 +419,7 @@ if options.no_prefix and @dir_prefix:
 if options.sort:
     @fileview_sortlist.append(SORT_LINE)
     if options.fn_coverage:
-        @fileview_sortlist.append(SORT_FUNC)  
+        @fileview_sortlist.append(SORT_FUNC)
     if options.br_coverage:
         @fileview_sortlist.append(SORT_BRANCH)
     @funcview_sortlist.append(SORT_LINE)
@@ -502,7 +502,7 @@ def gen_html():
     Files will be written to the current directory. If provided, test case
     descriptions will be read from .tests file TEST_FILENAME and included
     in ouput.
-    
+
     Die on error.
     """
     global options
@@ -793,7 +793,7 @@ def process_dir(abs_dir):
 
     # Create sorted pages
     for $_ in @fileview_sortlist:
-        # Generate directory overview page (without details)    
+        # Generate directory overview page (without details)
         write_dir_page(fileview_sortname[$_],
                        Path($rel_dir), Path($base_dir), args.test_title, Path(trunc_dir),
                        overall_found,  overall_hit,
@@ -853,7 +853,7 @@ def process_file($trunc_dir, $rel_dir, $filename) -> Tuple ???:
     page_title = f"LCOV - args.test_title - {trunc_dir}/$base_name"
 
     # Generate source code view for this file
-    with html_create(Path(f"$rel_dir/$base_name.gcov.{options.html_ext}")) as html_handle: 
+    with html_create(Path(f"$rel_dir/$base_name.gcov.{options.html_ext}")) as html_handle:
 
         write_html_prolog(html_handle, Path(base_dir), page_title)
 
@@ -923,7 +923,7 @@ def write_function_page(base_dir: Path, rel_dir: Path, trunc_dir: Path,
     # Generate function table for this file
     if sort_type == 0:
         filename = rel_dir/f"$base_name.func.{options.html_ext}"
-    else:                  
+    else:
         filename = rel_dir/f"$base_name.func-sort-c.{options.html_ext}"
 
     with html_create(filename) as html_handle:
@@ -960,7 +960,7 @@ def write_function_table(html_handle,
     #
     """Write an HTML table listing all functions in a source file, including
     also function call counts and line coverages inside of each function.
-    
+
     Die on error.
     """
     global options
@@ -1050,12 +1050,12 @@ def get_converted_lines(testdata: Dict[str, Dict[???, ???]]) -> Set[int]: # NOK
 def read_info_file($tracefile) -> Dict[???, ???]:
     """
     read_info_file(info_filename)
-    
+
     Read in the contents of the .info file specified by INFO_FILENAME. Data will
     be returned as a reference to a hash containing the following mappings:
-    
+
     %result: for each filename found in file -> \%data
-    
+
     %data: "test"    -> \%testdata
            "sum"     -> \%sumcount
            "func"    -> \%funcdata
@@ -1070,11 +1070,11 @@ def read_info_file($tracefile) -> Dict[???, ???]:
            "sumfnc"  -> \%sumfnccount
            "testbr"  -> \%testbrdata
            "sumbr"   -> \%sumbrcount
-    
+
     %testdata   : name of test affecting this file -> \%testcount
     %testfncdata: name of test affecting this file -> \%testfnccount
     %testbrdata:  name of test affecting this file -> \%testbrcount
-    
+
     %testcount   : line number   -> execution count for a single test
     %testfnccount: function name -> execution count for a single test
     %testbrcount : line number   -> branch coverage data for a single test
@@ -1084,14 +1084,14 @@ def read_info_file($tracefile) -> Dict[???, ???]:
     %funcdata    : function name -> line number
     %checkdata   : line number   -> checksum of source code line
     $brdata      : vector of items: block, branch, taken
-    
+
     Note that .info file sections referring to the same file and test name
     will automatically be combined by adding all execution counts.
-    
+
     Note that if INFO_FILENAME ends with ".gz", it is assumed that the file
     is compressed using GZIP. If available, GUNZIP will be used to decompress
     this file.
-    
+
     Die on error.
     """
     global options
@@ -1185,7 +1185,7 @@ def read_info_file($tracefile) -> Dict[???, ???]:
                     $data = $result[filename]
 
                     (testdata, $sumcount, $funcdata, $checkdata,
-                     testfncdata, $sumfnccount, 
+                     testfncdata, $sumfnccount,
                      $testbrdata, $sumbrcount,
                      _, _, _, _, _, _) = get_info_entry($data)
 
@@ -1435,7 +1435,7 @@ def get_dir_list(filename_list: List[str]) -> List[str]:
 def get_relative_base_path(subdir: str):
     """Return a relative path string which references the base path
     when applied in SUBDIRECTORY.
-    
+
     Example: get_relative_base_path("fs/mm") -> "../../"
     """
     result = ""
@@ -1453,14 +1453,14 @@ def get_relative_base_path(subdir: str):
 def read_testfile(test_filename: Path) -> Dict[str, str]:
     """Read in file TEST_FILENAME which contains test descriptions
     in the format:
-    
+
       TN:<whitespace><test name>
       TD:<whitespace><test description>
-    
+
     for each test case. Return a reference to a hash containing a mapping
-    
+
       test name -> test description.
-    
+
     Die on error.
     """
     result: Dict[str, str] = {}
@@ -1539,9 +1539,9 @@ def write_description_file(description: Dict[???, ???],
     #
     """Write HTML file containing all test case descriptions.
     DESCRIPTIONS is a reference to a hash containing a mapping
-    
+
       test case name -> test case description
-    
+
     Die on error.
     """
     global options
@@ -1703,22 +1703,22 @@ def write_png_files():
              0x4e, 0x44, 0xae, 0x42, 0x60, 0x82]
 
     data["glass.png"] =
-        [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 
-         0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 
-         0x00, 0x00, 0x00, 0x01, 0x01, 0x03, 0x00, 0x00, 0x00, 0x25, 
-         0xdb, 0x56, 0xca, 0x00, 0x00, 0x00, 0x04, 0x67, 0x41, 0x4d, 
-         0x41, 0x00, 0x00, 0xb1, 0x8f, 0x0b, 0xfc, 0x61, 0x05, 0x00, 
-         0x00, 0x00, 0x06, 0x50, 0x4c, 0x54, 0x45, 0xff, 0xff, 0xff, 
-         0x00, 0x00, 0x00, 0x55, 0xc2, 0xd3, 0x7e, 0x00, 0x00, 0x00, 
-         0x01, 0x74, 0x52, 0x4e, 0x53, 0x00, 0x40, 0xe6, 0xd8, 0x66, 
-         0x00, 0x00, 0x00, 0x01, 0x62, 0x4b, 0x47, 0x44, 0x00, 0x88, 
-         0x05, 0x1d, 0x48, 0x00, 0x00, 0x00, 0x09, 0x70, 0x48, 0x59, 
-         0x73, 0x00, 0x00, 0x0b, 0x12, 0x00, 0x00, 0x0b, 0x12, 0x01, 
-         0xd2, 0xdd, 0x7e, 0xfc, 0x00, 0x00, 0x00, 0x07, 0x74, 0x49, 
-         0x4d, 0x45, 0x07, 0xd2, 0x07, 0x13, 0x0f, 0x08, 0x19, 0xc4, 
-         0x40, 0x56, 0x10, 0x00, 0x00, 0x00, 0x0a, 0x49, 0x44, 0x41, 
-         0x54, 0x78, 0x9c, 0x63, 0x60, 0x00, 0x00, 0x00, 0x02, 0x00, 
-         0x01, 0x48, 0xaf, 0xa4, 0x71, 0x00, 0x00, 0x00, 0x00, 0x49, 
+        [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00,
+         0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01,
+         0x00, 0x00, 0x00, 0x01, 0x01, 0x03, 0x00, 0x00, 0x00, 0x25,
+         0xdb, 0x56, 0xca, 0x00, 0x00, 0x00, 0x04, 0x67, 0x41, 0x4d,
+         0x41, 0x00, 0x00, 0xb1, 0x8f, 0x0b, 0xfc, 0x61, 0x05, 0x00,
+         0x00, 0x00, 0x06, 0x50, 0x4c, 0x54, 0x45, 0xff, 0xff, 0xff,
+         0x00, 0x00, 0x00, 0x55, 0xc2, 0xd3, 0x7e, 0x00, 0x00, 0x00,
+         0x01, 0x74, 0x52, 0x4e, 0x53, 0x00, 0x40, 0xe6, 0xd8, 0x66,
+         0x00, 0x00, 0x00, 0x01, 0x62, 0x4b, 0x47, 0x44, 0x00, 0x88,
+         0x05, 0x1d, 0x48, 0x00, 0x00, 0x00, 0x09, 0x70, 0x48, 0x59,
+         0x73, 0x00, 0x00, 0x0b, 0x12, 0x00, 0x00, 0x0b, 0x12, 0x01,
+         0xd2, 0xdd, 0x7e, 0xfc, 0x00, 0x00, 0x00, 0x07, 0x74, 0x49,
+         0x4d, 0x45, 0x07, 0xd2, 0x07, 0x13, 0x0f, 0x08, 0x19, 0xc4,
+         0x40, 0x56, 0x10, 0x00, 0x00, 0x00, 0x0a, 0x49, 0x44, 0x41,
+         0x54, 0x78, 0x9c, 0x63, 0x60, 0x00, 0x00, 0x00, 0x02, 0x00,
+         0x01, 0x48, 0xaf, 0xa4, 0x71, 0x00, 0x00, 0x00, 0x00, 0x49,
          0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82]
 
     if options.sort;
@@ -2056,7 +2056,7 @@ END_OF_HTML
 
 def write_overview_line(html_handle, base_name: str, line: int, link_no: int):
     """ """
-    global options 
+    global options
 
     x1 = 0
     y1 = line - 1
@@ -2079,7 +2079,7 @@ def write_header(html_handle, header_type: int,
     """
     write_header(html_handle, type, trunc_file_name, rel_file_name, ln_found,
                  ln_hit, funcs_found, funcs_hit, sort_type)
-    
+
     Write a complete standard page header. TYPE may be (0, 1, 2, 3, 4)
     corresponding to (directory view header, file view header, source view
     header, test case description header, function view header)
@@ -2282,21 +2282,21 @@ def write_file_table(html_handle,
                      base_dir: Path,
                      overview: Dict[str, List],
                      testhash,
-                     testfnchash, 
-                     testbrhash,  
+                     testfnchash,
+                     testbrhash,
                      fileview: bool, sort_type: int):
     """Write a complete file table. OVERVIEW is a reference to a hash
     containing the following mapping:
-    
+
       filename -> "ln_found,ln_hit,funcs_found,funcs_hit,page_link,
                    func_link"
-    
+
     TESTHASH is a reference to the following hash:
-    
+
       filename -> \%testdata
       %testdata: name of test affecting this file -> \%testcount
       %testcount: line number -> execution count for a single test
-    
+
     Heading of first column is "Filename" if FILEVIEW is true,
     "Directory name" otherwise.
     """
@@ -2746,7 +2746,7 @@ def get_affecting_tests(test_line_data:  Dict[str, Dict[int,    int]],
 # NOK
 def write_source(html_handle,
                  source_filename: Path,
-                 count_data: Dict[???, ???], 
+                 count_data: Dict[???, ???],
                  checkdata: Dict[int, ???],
                  converted: Set[int],
                  $funcdata,

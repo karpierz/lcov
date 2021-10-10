@@ -14,7 +14,7 @@ lcov
 #   2002-10-16 / Peter Oberparleiter: implemented --add-tracefile option
 #   2002-10-17 / Peter Oberparleiter: implemented --extract option
 #   2002-11-04 / Peter Oberparleiter: implemented --list option
-#   2003-03-07 / Paul Larson: Changed to make it work with the latest gcov 
+#   2003-03-07 / Paul Larson: Changed to make it work with the latest gcov
 #                kernel patch.  This will break it with older gcov-kernel
 #                patches unless you change the value of $gcovmod in this script
 #   2003-04-07 / Peter Oberparleiter: fixed bug which resulted in an error
@@ -424,7 +424,7 @@ def check_options():
         args.summary,
     )
     count = len([1 for item in options if item])
-    
+
     if count == 0:
         die("Need one of options -z, -c, -a, -e, -r, -l, "
             "--diff or --summary\n"
@@ -464,7 +464,7 @@ def userspace_reset():
 def userspace_capture():
     """Capture coverage data found in DIRECTORY and write it to a package
     (if TO_PACKAGE specified) or to OUTPUT_FILENAME or sys.stdout.
-    
+
     Die on error.
     """
     global args
@@ -966,7 +966,7 @@ def link_data(targetdatadir: Path, targetgraphdir: Path, *, create: bool):
     targetdatadir  = Path(abs_path(str(targetdatadir)))  # NOK
     targetgraphdir = Path(abs_path(str(targetgraphdir))) # NOK
 
-    op_data_cb = link_data_cb if create else unlink_data_cb, 
+    op_data_cb = link_data_cb if create else unlink_data_cb,
     lcov_find(targetdatadir, op_data_cb, targetgraphdir, [r"\.gcda$", r"\.da$"])
 
 # NOK
@@ -1087,7 +1087,7 @@ def create_temp_dir() -> Path:
     return dir
 
 
-def compress_brcount(brcount: Dict[int, str]) -> Tuple[Dict[int, str], int, int]: 
+def compress_brcount(brcount: Dict[int, str]) -> Tuple[Dict[int, str], int, int]:
     """ """
     db = brcount_to_db(brcount)
     return db_to_brcount(db, brcount)
@@ -1129,7 +1129,7 @@ def read_info_file($tracefile) -> Dict[str, Dict[str, object]]:
     # %funcdata    : function name -> line number
     # %checkdata   : line number   -> checksum of source code line
     # $brdata      : text "block,branch,taken:..."
-    # 
+    #
     # Note that .info file sections referring to the same file and test name
     # will automatically be combined by adding all execution counts.
     #
@@ -1255,7 +1255,7 @@ def read_info_file($tracefile) -> Dict[str, Dict[str, object]]:
 
             match = re.match(r"^FN:(\d+),([^,]+)", line)
             if match:
-                if options.fn_coverage: 
+                if options.fn_coverage:
                     # Function data found, add to structure
                     $funcdata->{$2} = $1;
 
@@ -1405,7 +1405,7 @@ def set_info_entry(entry: Dict[str, object],
     entry["check"]   = checkdata
     entry["testfnc"] = testfncdata
     entry["sumfnc"]  = sumfcncount
-    entry["testbr"]  = testbrdata  
+    entry["testbr"]  = testbrdata
     entry["sumbr"]   = sumbrcount
     if ln_found is not None: entry["found"]   = ln_found
     if ln_hit   is not None: entry["hit"]     = ln_hit
@@ -1418,9 +1418,9 @@ def set_info_entry(entry: Dict[str, object],
 def add_counts(data1: Dict[int, int],
                data2: Dict[int, int]) -> Tuple[Dict[int, int], int, int]:
     """DATA1 and DATA2 are references to hashes containing a mapping
-    
+
       line number -> execution count
-    
+
     Return a list (RESULT, LINES_FOUND, LINES_HIT) where RESULT is
     a reference to a hash containing the combined mapping in which
     execution counts are added.
@@ -1462,9 +1462,9 @@ def merge_checksums(dict1: Dict[int, object],
                     dict2: Dict[int, object],
                     filename: str) -> Dict[int, object]:
     """dict1 and dict2 are dicts containing a mapping
-    
+
       line number -> checksum
-    
+
     Merge checksum lists defined in dict1 and dict2 and return resulting hash.
     Die if a checksum for a line is defined in both hashes but does not match.
     """
@@ -2670,10 +2670,10 @@ def convert_paths($trace_data, path_conversion_data: Dict[str, str]):
 def apply_diff(count_data: Dict[int, object],
                line_data: Dict[int, int]) -> Dict[int, object]:
     """Transform count data using a mapping of lines:
-    
+
       count_data: line number -> data
       line_data:  line number new -> line number old
-    
+
     Return a reference to transformed count data.
     """
     result: Dict[int, object] = {}  # Resulting hash
@@ -2945,8 +2945,8 @@ def rate(hit: int, found: Optional[int],
     # Assign defaults if necessary
     if precision is None: precision = default_precision
     if suffix    is None: suffix    = ""
-    if width     is None: width     = 0 
-        
+    if width     is None: width     = 0
+
     if found is None: or found == 0:
         return "%*s" % (width, "-")
 

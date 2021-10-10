@@ -49,10 +49,10 @@ def remove_items_from_dict(dict: Dict, fns: List):
 def system_no_output(mode: int, *args) -> int:
     """Call an external program using ARGS while suppressing
     depending on the value of MODE:
-    
+
       MODE & 1: suppress sys.stdout
       MODE & 2: suppress sys.stderr
-    
+
     Return 0 on success, non-zero otherwise.
     """
     # Save previous stdout and stderr handles
@@ -73,7 +73,7 @@ def system_no_output(mode: int, *args) -> int:
         # Restore previous handles
         if mode & 1: sys.stdout = prev_stdout
         if mode & 2: sys.stderr = prev_stderr
- 
+
     return result
 
 # NOK
@@ -146,7 +146,7 @@ def apply_config(ref: Dict):
     # where KEY_STRING is a keyword and VAR_REF is a reference to an
     # associated variable. If the global configuration dicts OPT_RC
     # or CONFIG contain a value for keyword KEY_STRING, VAR_REF
-    # will be assigned the value for that keyword. 
+    # will be assigned the value for that keyword.
 
     global opt_rc, config
 

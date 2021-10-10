@@ -7,7 +7,7 @@ gendesc
   For each test case:
     <test name><optional whitespace>
     <at least one whitespace character (blank/tab)><test description>
-  
+
   Actual description may consist of several lines. By default, output is
   written to stdout. Test names consist of alphanumeric characters
   including _ and -.
@@ -35,12 +35,12 @@ lcov_url     = "http://ltp.sourceforge.net/coverage/lcov.php"
 def gen_description(input_filename: Path, output_filename: Optional[Path]):
     """Read text file INPUT_FILENAME and convert the contained description
     to a format as understood by genhtml, i.e.
-    
+
        TN:<test name>
        TD:<test description>
-    
+
     If defined, write output to OUTPUT_FILENAME, otherwise to stdout.
-    
+
     Die on error.
     """
     try:
