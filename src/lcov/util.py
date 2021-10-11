@@ -159,6 +159,33 @@ def apply_config(ref: Dict):
             ref[key] = config[key]
 
 
+def parse_ignore_errors(ignore_errors: Optional[List], ignore: Dict[int, bool]):
+    """Parse user input about which errors to ignore."""
+
+    # Defaults
+    for item_id in ERROR_ID.values():
+        ignore[item_id] = False
+
+    if not ignore_errors: return
+
+    items = []
+    for item in ignore_errors:
+        item = re.sub(r"\s", r"", item)
+        if "," in item:
+            # Split and add comma-separated parameters
+            items += item.split(",")
+        else:
+            # Add single parameter
+            items.append(item)
+
+    for item in items:
+        lc_item = item.lower()
+        if lc_item not in ERROR_ID:
+            die(f"ERROR: unknown argument for --ignore-errors: {item}")
+        item_id = ERROR_ID[lc_item]
+        ignore[item_id] = True
+
+
 def strip_spaces_in_options(opt_dict: Dict):
     """Remove spaces around options"""
     return {key.strip(): value.strip() for key, value in opt_dict.items()}

@@ -58,6 +58,7 @@ from .util import apply_config
 from .util import system_no_output, NO_ERROR
 from .util import transform_pattern
 from .util import strip_spaces_in_options
+from .util import parse_ignore_errors
 from .util import warn, die
 
 # Constants
@@ -176,7 +177,7 @@ adjust_src_replace: Optional[???] = None
 options.adjust_testname: bool = False
 our $config;        # Configuration file contents
 args.ignore_errors:    List[str] = []  # List of errors to ignore (parameter)
-our @ignore;        # List of errors to ignore (array)
+ignore: Dict[int, bool] = {}  # List of errors to ignore (array)
 args.initial = False
 args.include_patterns: List[str] = []  # List of source file patterns to include
 args.exclude_patterns: List[str] = []  # List of source file patterns to exclude
@@ -3205,28 +3206,6 @@ def get_gcov_capabilities() -> Set[str]:
         debug(f"gcov has capability '{capability}'\n")
 
     return capabilities
-
-
-def parse_ignore_errors(ignore_errors: Optional[List], ignore: Dict):
-    """Parse user input about which errors to ignore."""
-    if not ignore_errors: return
-
-    items = []
-    for item in ignore_errors:
-        item = re.sub(r"\s", r"", item)
-        if "," in item:
-            # Split and add comma-separated parameters
-            items += item.split(",")
-        else:
-            # Add single parameter
-            items.append(item)
-
-    for item in items:
-        lc_item = item.lower()
-        if lc_item not in ERROR_ID:
-            die(f"ERROR: unknown argument for --ignore-errors: {item}")
-        item_id = ERROR_ID[lc_item]
-        ignore[item_id] = True
 
 
 def is_external(filename: str) -> bool:

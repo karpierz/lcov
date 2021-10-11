@@ -82,6 +82,7 @@ from .util import apply_config
 from .util import system_no_output, NO_ERROR
 from .util import get_date_string
 from .util import strip_spaces_in_options
+from .util import parse_ignore_errors
 from .util import warn, die
 
 # Global constants
@@ -92,13 +93,11 @@ lcov_version = "LCOV version " #+ `${abs_path(dirname($0))}/get_version.sh --ful
 lcov_url     = "http://ltp.sourceforge.net/coverage/lcov.php"
 
 # Specify coverage rate default precision
-our $default_precision = 1;
-
+options.default_precision = 1
 # Specify coverage rate limits (in %) for classifying file entries
-# HI:   options.hi_limit <= rate <= 100          graph color: green
-# MED: options.med_limit <= rate <  options.hi_limit    graph color: orange
-# LO:          0  <= rate <  options.med_limit   graph color: red
-
+# HI:   options.hi_limit <= rate <= 100             graph color: green
+# MED: options.med_limit <= rate < options.hi_limit graph color: orange
+# LO:         0  <= rate < options.med_limit        graph color: red
 # For line coverage/all coverage types if not specified
 options.hi_limit:  int = 90
 options.med_limit: int = 75
@@ -108,29 +107,27 @@ options.fn_med_limit: Optional[int] = None
 # For branch coverage
 options.br_hi_limit:  Optional[int] = None
 options.br_med_limit: Optional[int] = None
-
 # Width of overview image
 options.overview_width = 80
 # Resolution of overview navigation: this number specifies the maximum
 # difference in lines between the position a user selected from the overview
 # and the position the source code window is scrolled to.
 options.nav_resolution = 4
-# Clicking a line in the overview image should show the source code view at
-# a position a bit further up so that the requested line is not the first
+# Clicking a line in the overview image should show the source code view
+# at a position a bit further up so that the requested line is not the first
 # line in the window. This number specifies that offset in lines.
 options.nav_offset = 10
-
-# Clicking on a function name should show the source code at a position a
-# few lines before the first line of code of that function. This number
-# specifies that offset in lines.
-our $func_offset = 2;
-
-our $overview_title = "top level";
-
 # Width for line coverage information in the source code view
 options.line_field_width = 12
 # Width for branch coverage information in the source code view
 options.br_field_width = 16
+
+# Clicking on a function name should show the source code at a position
+# a few lines before the first line of code of that function. This number
+# specifies that offset in lines.
+our $func_offset = 2;
+
+overview_title = "top level"
 
 # Internal Constants
 
@@ -207,11 +204,11 @@ options.no_br_coverage:  Optionsl[bool] = None  # Disable br_coverage
 options.sort = True      # If set, provide directory listings with sorted entries
 $no_sort;        # Disable sort
 our $frames;        # If set, use frames for source code view
-our $keep_descriptions;    # If set, do not remove unused test case descriptions
+options.keep_descriptions: bool = False  # If set, do not remove unused test case descriptions
 options.no_sourceview: bool = False  # If set, do not create a source code view for each file
 options.highlight: Optional[bool] = None  # If set, highlight lines covered by converted data only
-our $legend;        # If set, include legend in output
-our $tab_size = 8;    # Number of spaces to use in place of tab
+options.legend: bool = False  # If set, include legend in output
+options.tab_size: int = 8  # Number of spaces to use in place of tab
 our $config;        # Configuration file contents
 options.html_prolog_file: Optional[Path] = None  # Custom HTML prolog file (up to and including <body>)
 options.html_epilog_file: Optional[Path] = None  # Custom HTML epilog file (from </body> onwards)
@@ -223,12 +220,12 @@ options.demangle_cpp = False  # Demangle C++ function names
 options.demangle_cpp_tool:   str = "c++filt"  # Default demangler for C++ function names
 options.demangle_cpp_params: str = ""         # Extra parameters for demangling
 args.ignore_errors:     List[str] = []    # Ignore certain error classes during processing
-our @ignore;
+ignore: Dict[int, bool] = {}  # List of errors to ignore (array)
 our $opt_config_file;    # User-specified configuration file location
 our %opt_rc;
 options.missed;    # List/sort lines by missed counts
 options.dark_mode: bool = False  # Use dark mode palette or normal
-our $charset = "UTF-8";    # Default charset for HTML pages
+options.charset: str = "UTF-8"    # Default charset for HTML pages
 our @fileview_sortlist;
 
 fileview_sortname = ("", "-sort-l", "-sort-f", "-sort-b")
@@ -267,24 +264,24 @@ if $config or %opt_rc:
         "genhtml_overview_width"      => \options.overview_width,
         "genhtml_nav_resolution"      => \options.nav_resolution,
         "genhtml_nav_offset"          => \options.nav_offset,
-        "genhtml_keep_descriptions"   => \$keep_descriptions,
+        "genhtml_keep_descriptions"   => \options.keep_descriptions,
         "genhtml_no_prefix"           => \options.no_prefix,
         "genhtml_no_source"           => \options.no_sourceview,
-        "genhtml_num_spaces"          => \$tab_size,
+        "genhtml_num_spaces"          => \options.tab_size,
         "genhtml_highlight"           => \options.highlight,
-        "genhtml_legend"              => \$legend,
+        "genhtml_legend"              => \options.legend,
         "genhtml_html_prolog"         => \Path(options.html_prolog_file),
         "genhtml_html_epilog"         => \Path(options.html_epilog_file),
         "genhtml_html_extension"      => \options.html_ext,
         "genhtml_html_gzip"           => \options.html_gzip,
-        "genhtml_precision"           => \$default_precision,
+        "genhtml_precision"           => \options.default_precision,
         "genhtml_function_hi_limit"   => \options.fn_hi_limit,
         "genhtml_function_med_limit"  => \options.fn_med_limit,
         "genhtml_branch_hi_limit"     => \options.br_hi_limit,
         "genhtml_branch_med_limit"    => \options.br_med_limit,
         "genhtml_branch_field_width"  => \options.br_field_width,
         "genhtml_sort"                => \options.sort,
-        "genhtml_charset"             => \$charset,
+        "genhtml_charset"             => \options.charset,
         "genhtml_desc_html"           => \options.rc_desc_html,
         "genhtml_demangle_cpp"        => \options.demangle_cpp,
         "genhtml_demangle_cpp_tool"   => \options.demangle_cpp_tool,
@@ -311,17 +308,17 @@ if (!GetOptions(
         "output-directory|o=s" => \$output_directory,
         "title|t=s"            => \args.test_title,
         "description-file|d=s" => \$desc_filename,
-        "keep-descriptions|k"  => \$keep_descriptions,
+        "keep-descriptions|k"  => \options.keep_descriptions,
         "css-file|c=s"         => \Path(options.css_filename),
         "baseline-file|b=s"    => \$base_filename,
         "prefix|p=s"           => \@opt_dir_prefix,
-        "num-spaces=i"         => \$tab_size,
+        "num-spaces=i"         => \options.tab_size,
         "no-prefix"            => \options.no_prefix,
         "no-sourceview"        => \options.no_sourceview,
         "show-details|s"       => \options.show_details,
         "frames|f"             => \$frames,
         "highlight"            => \options.highlight,
-        "legend"               => \$legend,
+        "legend"               => \options.legend,
         "quiet|q"              => \args.quiet,
         "help|h|?"             => \args.help,
         "version|v"            => \$version,
@@ -339,7 +336,7 @@ if (!GetOptions(
         "ignore-errors=s"      => \args.ignore_errors,
         "config-file=s"        => \$opt_config_file,
         "rc=s%"                => \%opt_rc,
-        "precision=i"          => \$default_precision,
+        "precision=i"          => \options.default_precision,
         "missed"               => \options.missed,
         "dark-mode"            => \options.dark_mode,
         )):
@@ -368,7 +365,6 @@ if $version:
 
 # Determine which errors the user wants us to ignore
 parse_ignore_errors(args.ignore_errors, ignore)
-
 # Split the list of prefixes if needed
 parse_dir_prefix(@opt_dir_prefix)
 
@@ -393,8 +389,9 @@ if options.css_filename is not None:
         options.css_filename = cwd/options.css_filename
 
 # Make sure tab_size is within valid range
-if $tab_size < 1:
-    print("ERROR: invalid number of spaces specified: $tab_size!", file=sys.stderr)
+if options.tab_size < 1:
+    print(f"ERROR: invalid number of spaces specified: {options.tab_size}!",
+          file=sys.stderr)
     sys.exit(1)
 
 # Get HTML prolog and epilog
@@ -434,7 +431,7 @@ if options.demangle_cpp:
             "--demangle-cpp")
 
 # Make sure precision is within valid range
-if $default_precision < 1 or $default_precision > 4:
+if not (1 <= options.default_precision <= 4):
     die("ERROR: specified precision is out of range (1 to 4)")
 
 # Make sure output_directory exists, create it if necessary
@@ -561,7 +558,7 @@ def gen_html():
             test_description = read_testfile(Path($desc_filename))
             # Remove test descriptions which are not referenced
             # from info_data if user didn't tell us otherwise
-            if not $keep_descriptions:
+            if not options.keep_descriptions:
                 remove_unused_descriptions()
 
         # Change to output directory if specified
@@ -891,7 +888,7 @@ def process_file($trunc_dir, $rel_dir, $filename) -> Tuple ???:
 
     # Create overview png file
     gen_png("$rel_dir/$base_name.gcov.png",
-            options.dark_mode, options.overview_width, $tab_size, @source)
+            options.dark_mode, options.overview_width, options.tab_size, @source)
 
     # Create frameset page
     with html_create(Path(f"$rel_dir/$base_name.gcov.frameset.{options.html_ext}")) as html_handle:
@@ -1511,6 +1508,8 @@ def escape_html(string: str):
     """Return a copy of STRING in which all occurrences of HTML
     special characters are escaped.
     """
+    global options
+
     if not string:
         return ""
 
@@ -1520,7 +1519,7 @@ def escape_html(string: str):
     string = string.replace("\"", "&quot")  # " -> &quot;
 
     while ($string =~ /^([^\t]*)(\t)/):
-        $replacement = " " * ($tab_size - (length($1) % $tab_size))
+        $replacement = " " * (options.tab_size - (length($1) % options.tab_size))
         $string =~ s/^([^\t]*)(\t)/$1$replacement/
 
     string = string.replace("\n", "<br>")  # \n -> <br>
@@ -1993,7 +1992,7 @@ def write_frameset(html_handle, basedir: str, basename: str, pagetitle: str):
     <html lang="en">
 
     <head>
-      <meta http-equiv="Content-Type" content="text/html; charset=$charset">
+      <meta http-equiv="Content-Type" content=f"text/html; charset={options.charset}">
       <title>{pagetitle}</title>
       <link rel="stylesheet" type="text/css" href="{basedir}gcov.css">
     </head>
@@ -2024,7 +2023,7 @@ def write_overview(html_handle, basedir: Path, basename, pagetitle: str, lines: 
 
     <head>
       <title>{pagetitle}</title>
-      <meta http-equiv="Content-Type" content="text/html; charset=$charset">
+      <meta http-equiv="Content-Type" content=f"text/html; charset={options.charset}">
       <link rel="stylesheet" type="text/css" href="{basedir}gcov.css">
     </head>
 
@@ -2086,6 +2085,7 @@ def write_header(html_handle, header_type: int,
     global options
     global args
     global test_description
+    global overview_title
 
     my $base_dir;
     my $view;
@@ -2103,12 +2103,12 @@ def write_header(html_handle, header_type: int,
     if header_type == HDR_DIR:
         # Main overview
         $base_dir = ""
-        $view = $overview_title;
+        $view = overview_title
     elif header_type == HDR_FILE:
         # Directory overview
         $base_dir = get_relative_base_path($rel_filename);
         $view = ("<a href=\"$base_dir" + f"index.{options.html_ext}\">"
-                 f"$overview_title</a> - {esc_trunc_name}")
+                 f"{overview_title}</a> - {esc_trunc_name}")
     elif header_type == HDR_SOURCE or header_type == HDR_FUNC:
         # File view
         dir_name      = dirname($rel_filename)
@@ -2120,12 +2120,12 @@ def write_header(html_handle, header_type: int,
             # Need to break frameset when clicking any of these
             # links
             $view = ("<a href=\"$base_dir" + f"index.{options.html_ext}\" ".
-                     "target=\"_parent\">$overview_title</a> - ".
+                     f"target=\"_parent\">{overview_title}</a> - ".
                      f"<a href=\"index.{options.html_ext}\" target=\"_parent\">".
                      "$esc_dir_name</a> - $esc_base_name")
         else:
             $view = ("<a href=\"$base_dir" + f"index.{options.html_ext}\">".
-                     "$overview_title</a> - ".
+                     f"{overview_title}</a> - ".
                      f"<a href=\"index.{options.html_ext}\">".
                      "$esc_dir_name</a> - $esc_base_name")
 
@@ -2145,7 +2145,7 @@ def write_header(html_handle, header_type: int,
         # Test description header
         $base_dir = ""
         $view = ("<a href=\"$base_dir" + f"index.{options.html_ext}\">"
-                 "$overview_title</a> - test case descriptions")
+                 f"{overview_title}</a> - test case descriptions")
 
     # Prepare text for "test" field
     test = escape_html(args.test_title)
@@ -2179,7 +2179,7 @@ def write_header(html_handle, header_type: int,
                      [_, "headerValue", $date]]);
 
     # Right row
-    if $legend and (header_type == HDR_SOURCE or header_type == HDR_FUNC):
+    if options.legend and (header_type == HDR_SOURCE or header_type == HDR_FUNC):
         $text = <<END_OF_HTML;
             Lines:
             <span class="coverLegendCov">hit</span>
@@ -2194,7 +2194,7 @@ END_OF_HTML
 END_OF_HTML
         row_left.append([[_, "headerItem", "Legend:"],
                          [_, "headerValueLeg", $text]])
-    elif $legend and header_type != HDR_TESTDESC:
+    elif options.legend and header_type != HDR_TESTDESC:
         $text = <<END_OF_HTML;
         Rating:
             <span class="coverLegendCovLo" title="Coverage rates below {options.med_limit} % are classified as low">low: &lt; {options.med_limit} %</span>
@@ -2765,7 +2765,7 @@ def write_source(html_handle,
     try:
         SOURCE_HANDLE = source_filename.open("rt")
     except:
-        if not $ignore[ERROR_SOURCE]:
+        if not ignore[ERROR_SOURCE]:
             die(f"ERROR: cannot read {source_filename}")
 
         # Continue without source file
@@ -3344,28 +3344,6 @@ def get_fn_list(info: Dict[???, ???]) -> List[???]: # NOK
                 fns.add(func_name)
 
     return list(fns)
-
-
-def parse_ignore_errors(ignore_errors: Optional[List], ignore: Dict):
-    """Parse user input about which errors to ignore."""
-    if not ignore_errors: return
-
-    items = []
-    for item in ignore_errors:
-        item = re.sub(r"\s", r"", item)
-        if "," in item:
-            # Split and add comma-separated parameters
-            items += item.split(",")
-        else:
-            # Add single parameter
-            items.append(item)
-
-    for item in items:
-        lc_item = item.lower()
-        if lc_item not in ERROR_ID:
-            die(f"ERROR: unknown argument for --ignore-errors: {item}")
-        item_id = ERROR_ID[lc_item]
-        ignore[item_id] = True
 
 
 def parse_dir_prefix(prefixes: Optional[List]):
