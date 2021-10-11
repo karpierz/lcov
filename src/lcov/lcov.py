@@ -61,7 +61,7 @@ import shutil
 from pathlib import Path
 
 from .util import reverse_dict
-from .util import write_file
+from .util import read_file, write_file
 from .util import apply_config
 from .util import transform_pattern
 from .util import system_no_output, NO_ERROR
@@ -598,14 +598,13 @@ def lcov_geninfo(*dirs):
     """Call geninfo for the specified directories and with the parameters
     specified at the command line."""
     global args
-    global tool_dir
 
     dir_list = [str(dir) for dir in dirs]
 
     # Capture data
     info("Capturing coverage data from {}".format(" ".join(dir_list)))
 
-    param = [f"{tool_dir}/geninfo"] + dir_list
+    param = [f'"{sys.executable}"', "-m", "lcov.geninfo"] + dir_list
     if args.output_filename:
         param += ["--output-filename", str(args.output_filename)]
     if args.test_name:
@@ -652,10 +651,11 @@ def lcov_geninfo(*dirs):
     for patt in args.exclude_patterns:
         param += ["--exclude", patt]
 
-    os.system(@param)         # NOK
-        and sys.exit($? >> 8) # NOK
+    exit_code = os.system(" ".join(param))
+    if exit_code != NO_ERROR:
+        sys.exit($? >> 8) # NOK
 
-# NOK
+
 def get_package(package_file: Path) -> Tuple[Path, Optional[Path], Optional[int]]:
     """Unpack unprocessed coverage data files from package_file to a temporary
     directory and return directory name, build directory and gcov kernel version
@@ -666,21 +666,21 @@ def get_package(package_file: Path) -> Tuple[Path, Optional[Path], Optional[int]
     dir = create_temp_dir()
     cwd = Path.cwd()
     try:
-        my $gkv;
         info(f"Reading package {package_file}:")
 
-        $package_file = str(package_file.resolve())
+        package_file = package_file.resolve()
 
         os.chdir(dir)
         try:
-            fhandle = open("-|", "tar xvfz '$package_file' 2>/dev/null")
+            tar_process = subprocess.run(["tar", "xvfz", f"'{package_file}'"],
+                                         capture_output=True, encoding="utf-8",
+                                         check=True)
         except:
             die(f"ERROR: could not process package {package_file}")
-        count = 0;
-        with fhandle:
-            while (<fhandle>):
-                if (/\.da$/ or /\.gcda$/):
-                    count += 1
+        count = 0
+        for line in tar_process.stdout.splitlines():
+            if any(line.endswith(ext) for ext in (".da", ".gcda")):
+                count += 1
         if count == 0:
             die(f"ERROR: no data file found in package {package_file}")
         info(f"  data directory .......: {dir}")
@@ -690,8 +690,8 @@ def get_package(package_file: Path) -> Tuple[Path, Optional[Path], Optional[int]
             build = Path(build)
             info(f"  build directory ......: {build}")
         fpath = dir/pkg_gkv_file
-        $gkv = read_file(fpath)
-        if $gkv is not None:
+        gkv = read_file(fpath)
+        if gkv is not None:
             gkv = int(gkv)
             if gkv != GKV_PROC and gkv != GKV_SYS:
                 die(f"ERROR: unsupported gcov kernel version found ({gkv})")
@@ -723,19 +723,22 @@ def count_package_data(filename: Path) -> Optional[int]:
 
 def create_package(package_file: Path, dir: Path, build: Optional[Path],
                    gcov_kernel_version: Optional[int] = None)
+    # ... , source_directory, build_directory, ...])
     """ """
-    # NOK
-    # create_package(package_file, source_directory, build_directory[, kernel_gcov_version])
     global args
     global pkg_gkv_file, pkg_build_file
 
-    # Store unprocessed coverage data files from source_directory to package_file.
+    # Store unprocessed coverage data files from source_directory
+    # to package_file.
 
     cwd = Path.cwd()
     try:
         # Check for availability of tar tool first
         try:
-            system("tar --help > /dev/null") # NOK
+            subprocess.run(["tar", "--help"],
+                           stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL,
+                           check=True)
         exept
             die("ERROR: tar command not available")
 
@@ -765,10 +768,10 @@ def create_package(package_file: Path, dir: Path, build: Optional[Path],
             info("  content type .........: application data")
 
         # Create package
-        package_file = package_file.resolve() # NOK
+        package_file = package_file.resolve()
         os.chdir(dir)
         try:
-            subprocess.run(["tar", "cfz", str(package_file), "."],
+            subprocess.run(["tar", "cfz", f"'{package_file}'", "."],
                            check=True)
         except:
             die(f"ERROR: could not create package {package_file}")
@@ -813,7 +816,7 @@ def get_base(dir: Path) -> Tuple[Optional[Path], Optional[Path]]:
 
 def find_link_fn(path_from: Path, rel, filename):
     abs_file = path_from/rel/filename
-    return abs_file if (-l str(abs_file) else None # NOK
+    return abs_file if abs_file.is_symlink() else None
 
 # NOK
 def apply_base_dir($data: Path, $base: Optional[Path], $build, dirs: List) -> List:
@@ -979,14 +982,14 @@ def link_data_cb(datadir: Path, $rel, graphdir: Path):
     if (-e abs_to):
         die(f"ERROR: could not create symlink at {abs_to}: "
             "File already exists!")
-    if (-l abs_to):
+    if abs_to.is_symlink():
         # Broken link - possibly from an interrupted earlier run
         abs_to.unlink()
 
     # Check for graph file
     $base = str(abs_to)
     $base =~ s/\.(gcda|da)$//
-    if ! -e $base.".gcno" and ! -e $base.".bbg" and ! -e $base.".bb":
+    if not -e $base.".gcno" and not -e $base.".bbg" and not -e $base.".bb":
         die("ERROR: No graph file found for {} in {}!".format(
             abs_from, dirname($base)))
 
@@ -995,17 +998,17 @@ def link_data_cb(datadir: Path, $rel, graphdir: Path):
     except Exception as exc:
         or die(f"ERROR: could not create symlink at {abs_to}: {exc}")
 
-# NOK
+
 def unlink_data_cb(datadir: Path, $rel, graphdir: Path):
-    """Remove symbolic link from GRAPHDIR/REL to DATADIR/REL."""
+    """Remove symbolic link from graphdir/rel to datadir/rel."""
 
     abs_from = datadir/rel
     abs_to   = graphdir/rel
 
-    if (! -l abs_to):
+    if not abs_to.is_symlink():
         return
     try:
-        target = readlink(abs_to)
+        target = readlink(abs_to) # NOK
     except:
         return
     if target != abs_from:
@@ -2610,8 +2613,8 @@ def get_line_hash(filename: str,
     # Get converted path
     match = re.match(rf"^(.*){diff_name}$", filename)
     if match:
-        _, old_path, new_path = get_common_filename(filename,
-                                                    match.group(1) + path_data[diff_name])
+        _, old_path, new_path = get_common_filename(Path(filename),
+                                                    Path(match.group(1) + path_data[diff_name]))
     return (diff_data[diff_name], old_path, new_path)
 
 # NOK
@@ -2686,33 +2689,32 @@ def apply_diff(count_data: Dict[int, object],
 
     # Transform all other lines which come after the last diff entry
     for line in sorted({$a <=> $b} count_data.keys()): # NOK
-        # Skip lines which were covered by line hash
+        # Skip lines which w ere covered by line hash
         if line <= last_old: continue
         # Copy data to new hash with an offset
         result[line + (last_new - last_old)] = count_data[line]
 
     return result
 
-# NOK
-def get_common_filename(filename1: str,
-                        filename2: str) -> Optional[Tuple[str, str, str]]
-    """Check for filename components which are common to FILENAME1 and FILENAME2.
-    Upon success, return
+
+def get_common_filename(filename1: Path,
+                        filename2: Path) -> Optional[Tuple[str, str, str]]
+    """Check for filename components which are common to filename1 and
+    filename2. Upon success, return
 
       (common, path1, path2)
 
     or None in case there are no such parts.
     """
-    # !!! przetestowac zgodnosc z Perlowa wersja !!!
-    parts1 = filename1.split("/")
-    parts2 = filename2.split("/")
+    parts1 = filename1.parts
+    parts2 = filename2.parts
 
     common = []
     # Work in reverse order, i.e. beginning with the filename itself
-    while parts1 and parts2 and $parts1[$#parts1] == $parts2[$#parts2]:
+    while parts1 and parts2 and parts1[-1] == parts2[-1]:
         common_part = parts1.pop()
         parts2.pop()
-        unshift(common, common_part)
+        common.insert(0, common_part)
 
     # Did we find any similarities?
     if common:

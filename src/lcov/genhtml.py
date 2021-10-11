@@ -88,7 +88,6 @@ from .util import warn, die
 # Global constants
 tool_name    = Path(__file__).stem
 our $title   = "LCOV - code coverage report"
-our $tool_dir        = abs_path(dirname($0));
 lcov_version = "LCOV version " #+ `${abs_path(dirname($0))}/get_version.sh --full`
 lcov_url     = "http://ltp.sourceforge.net/coverage/lcov.php"
 
@@ -125,7 +124,7 @@ options.br_field_width = 16
 # Clicking on a function name should show the source code at a position
 # a few lines before the first line of code of that function. This number
 # specifies that offset in lines.
-our $func_offset = 2;
+func_offset = 2
 
 overview_title = "top level"
 
@@ -419,10 +418,6 @@ if options.sort:
     if options.br_coverage:
         @fileview_sortlist.append(SORT_BRANCH)
     @funcview_sortlist.append(SORT_LINE)
-
-if $frames:
-    # Include genpng code needed for overview image generation
-    do("$tool_dir/genpng")
 
 # Ensure that the c++filt tool is available when using --demangle-cpp
 if options.demangle_cpp:
@@ -959,6 +954,7 @@ def write_function_table(html_handle,
     Die on error.
     """
     global options
+    global func_offset
 
     my $func;
     my $demangle;
@@ -985,11 +981,9 @@ END_OF_HTML
     for $func in funcview_get_sorted($funcdata, $sumfncdata, sort_type):
         if ! defined($funcdata->{$func}): continue
 
-        $startline = $funcdata->{$func} - $func_offset;
+        $startline = $funcdata->{$func} - func_offset
         $name      = $func;
         $count     = $sumfncdata->{$name};
-
-        my $countstyle;
 
         # Replace function name with demangled version if available
         if exists($demangle->{$name}):
@@ -998,14 +992,13 @@ END_OF_HTML
         # Escape special characters
         $name = escape_html($name)
 
-        if $startline < 1:
-            $startline = 1
-        $countstyle = "coverFnLo" if $count == 0 else "coverFnHi"
+        if $startline < 1: $startline = 1
+        countstyle = "coverFnLo" if $count == 0 else "coverFnHi"
 
         write_html(html_handle, <<END_OF_HTML)
         <tr>
               <td class="coverFn"><a href="$source#$startline">$name</a></td>
-              <td class="$countstyle">$count</td>
+              <td class="{countstyle}">$count</td>
             </tr>
 END_OF_HTML
 
