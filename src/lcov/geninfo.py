@@ -165,13 +165,13 @@ args.quiet: bool = False  # If set, suppress information messages
 args.help:  bool = False  # Help option flag
 our $output_filename;
 $base_directory: Optional = None
-our $version;
-args.follow: bool = False
+args.version: bool = False  # Version option flag
+args.follow:  bool = False
 our $checksum;
-our $no_checksum;
+options.no_checksum:    Optional[bool] = None  # If set, don't calculate a checksum for each line
 options.compat_libtool: Optional[bool] = None
 args.no_compat_libtool: Optional[bool] = None
-our $rc_adjust_src_path;# Regexp specifying parts to remove from source path
+options.adjust_src_path: str = None  # Regexp specifying parts to remove from source path
 adjust_src_pattern: Optional[???] = None
 adjust_src_replace: Optional[???] = None
 options.adjust_testname: bool = False
@@ -191,7 +191,7 @@ args.debug = False
 gcov_capabilities: Set[str] = set()
 internal_dirs: List[str] = []
 our $opt_config_file;
-our $opt_gcov_all_blocks = 1
+options.gcov_all_blocks: bool = True
 opt_compat: Optional[str] = None
 our %opt_rc;
 compat_value: Dict[int, int] = {}
@@ -199,9 +199,9 @@ gcno_split_crc: Optional[bool] = None
 our $fn_coverage = 1
 our $br_coverage = 0
 options.no_exception_br: bool = False
-our $rc_auto_base = 1;
-intermediate = False
-options.intermediate = "auto"
+options.auto_base: bool = True
+intermediate: bool = False
+options.intermediate: str = "auto"
 options.excl_line:              str = "LCOV_EXCL_LINE"
 options.excl_br_line:           str = "LCOV_EXCL_BR_LINE"
 options.excl_exception_br_line: str = "LCOV_EXCL_EXCEPTION_BR_LINE"
@@ -237,13 +237,13 @@ if $config or %opt_rc:
         "geninfo_gcov_tool"           => \options.gcov_tool,
         "geninfo_adjust_testname"     => \options.adjust_testname,
         "geninfo_checksum"            => \$checksum,
-        "geninfo_no_checksum"         => \$no_checksum, # deprecated
+        "geninfo_no_checksum"         => \options.no_checksum, # deprecated
         "geninfo_compat_libtool"      => \options.compat_libtool,
         "geninfo_external"            => \options.external,
-        "geninfo_gcov_all_blocks"     => \$opt_gcov_all_blocks,
+        "geninfo_gcov_all_blocks"     => \options.gcov_all_blocks,
         "geninfo_compat"              => \opt_compat,
-        "geninfo_adjust_src_path"     => \$rc_adjust_src_path,
-        "geninfo_auto_base"           => \$rc_auto_base,
+        "geninfo_adjust_src_path"     => \options.adjust_src_path,
+        "geninfo_auto_base"           => \options.auto_base,
         "geninfo_intermediate"        => \options.intermediate,
         "geninfo_no_exception_branch" => \options.no_exception_br,
         "lcov_function_coverage"      => \$fn_coverage,
@@ -254,13 +254,13 @@ if $config or %opt_rc:
     });
 
     # Merge options
-    if defined($no_checksum):
-        $checksum = (0 if $no_checksum else 1)
-        $no_checksum = None
+    if options.no_checksum is not None:
+        $checksum = (0 if options.no_checksum else 1)
+        options.no_checksum = None
 
     # Check regexp
-    if defined($rc_adjust_src_path):
-        my ($pattern, $replace) = split(/\s*=>\s*/, $rc_adjust_src_path)
+    if options.adjust_src_path is not None:
+        my ($pattern, $replace) = split(/\s*=>\s*/, options.adjust_src_path)
         local $SIG{__DIE__};
         eval '$adjust_src_pattern = qr>'.$pattern.'>;';
         if adjust_src_pattern is None:
@@ -287,9 +287,9 @@ if (!GetOptions(
         "test-name|t=s"       => \$test_name,
         "output-filename|o=s" => \$output_filename,
         "checksum"            => \$checksum,
-        "no-checksum"         => \$no_checksum,
+        "no-checksum"         => \options.no_checksum,
         "base-directory|b=s"  => \args.base_directory,
-        "version|v"           => \$version,
+        "version|v"           => \args.version,
         "quiet|q"             => \args.quiet,
         "help|h|?"            => \args.help,
         "follow|f"            => \args.follow,
@@ -314,8 +314,8 @@ if (!GetOptions(
     sys.exit(1)
 
 # Merge options
-if $no_checksum is not None:
-    $checksum = not $no_checksum
+if options.no_checksum is not None:
+    $checksum = not options.no_checksum
 if args.no_compat_libtool is not None:
     options.compat_libtool = not args.no_compat_libtool
 if $opt_no_external is not None:
@@ -337,8 +337,8 @@ if args.help:
     sys.exit(0)
 
 # Check for version option
-if $version:
-    print(f"{tool_name}: {lcov_version}\n")
+if args.version:
+    print(f"{tool_name}: {lcov_version}")
     sys.exit(0)
 
 # Check gcov tool
@@ -349,7 +349,7 @@ gcov_version, gcov_version_string = get_gcov_version()
 gcov_capabilities = get_gcov_capabilities()
 
 # Determine intermediate mode
-if  == "0":
+if options.intermediate == "0":
     intermediate = False
 elif options.intermediate == "1":
     intermediate = True
@@ -381,7 +381,7 @@ if "branch-probabilities" in gcov_capabilities and ($br_coverage or $fn_coverage
     gcov_options.append("-b")
 if "branch-counts" in gcov_capabilities and $br_coverage:
     gcov_options.append("-c")
-if "all-blocks" in gcov_capabilities and $opt_gcov_all_blocks and $br_coverage and not intermediate:
+if "all-blocks" in gcov_capabilities and options.gcov_all_blocks and $br_coverage and not intermediate:
     gcov_options.append("-a")
 if "hash-filenames" in gcov_capabilities:
     gcov_options.append("-x");
@@ -733,7 +733,7 @@ def process_dafile(da_filename: Path, $dir):
             instr, graph = read_bb(Path($bb_filename))
 
         # Try to find base directory automatically if requested by user
-        if $rc_auto_base:
+        if options.auto_base:
             $base_dir = str(find_base_from_source(Path($base_dir),
                                                   [ keys(%{$instr}), keys(%{$graph}) ]))
 
@@ -1774,6 +1774,7 @@ def process_intermediate($file: Path, $dir, $tempdir):
     """Create output for a single file (either a data file or a graph file)
     using gcov's intermediate option.
     """
+    global options
     global args
     global cwd
     global ignore
@@ -1857,7 +1858,7 @@ def process_intermediate($file: Path, $dir, $tempdir):
                 $base =~ s/\.libs$//;
 
             # Try to find base directory automatically if requested by user
-            if $rc_auto_base:
+            if options.auto_base:
                 $base = str(find_base_from_source(Path($base), [ keys(%data) ]))
 
         # Apply base file name to relative source files
@@ -2128,7 +2129,7 @@ def process_graphfile(graph_filename: Path, $dir):
         instr, graph = read_bb(graph_filepath)
 
     # Try to find base directory automatically if requested by user
-    if $rc_auto_base:
+    if options.auto_base:
         $base_dir = str(find_base_from_source(Path($base_dir),
                                               [ keys(%{$instr}), keys(%{$graph}) ]))
 

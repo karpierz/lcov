@@ -194,7 +194,7 @@ our $desc_filename;    # Name of file containing test descriptions
 options.css_filename: Optional[Path] = None  # Optional name of external stylesheet file to use
 args.quiet: bool = False  # If set, suppress information messages
 args.help:  bool = False  # Help option flag
-our $version;        # Version option flag
+args.version: bool = False  # Version option flag
 options.show_details: bool = False  # If set, generate detailed directory view
 options.no_prefix:    bool = False  # If set, do not remove filename prefix
 options.fn_coverage:     Optionsl[bool] = None  # If set, generate function coverage statistics
@@ -321,7 +321,7 @@ if (!GetOptions(
         "legend"               => \options.legend,
         "quiet|q"              => \args.quiet,
         "help|h|?"             => \args.help,
-        "version|v"            => \$version,
+        "version|v"            => \args.version,
         "html-prolog=s"        => \Path(options.html_prolog_file),
         "html-epilog=s"        => \Path(options.html_epilog_file),
         "html-extension=s"     => \options.html_ext,
@@ -359,8 +359,8 @@ if args.help:
     sys.exit(0)
 
 # Check for version option
-if $version:
-    print(f"{tool_name}: $lcov_version\n")
+if args.version:
+    print(f"{tool_name}: {lcov_version}")
     sys.exit(0)
 
 # Determine which errors the user wants us to ignore
@@ -523,7 +523,7 @@ def gen_html():
         # Read and apply baseline data if specified
         if $base_filename:
             # Read baseline file
-            info(f"Reading baseline file $base_filename")
+            info(f"Reading baseline file {base_filename}")
             %base_data = read_info_file($base_filename)
             info("Found %d entries.", len(%base_data))
             # Apply baseline
@@ -580,8 +580,8 @@ def gen_html():
 
         # Process each subdirectory and collect overview information
         overview: Dict[???, ???] = {}
-        overall_found  = 0
-        overall_hit    = 0
+        total_ln_found = 0
+        total_ln_hit   = 0
         total_fn_found = 0
         total_fn_hit   = 0
         total_br_found = 0
@@ -610,8 +610,8 @@ def gen_html():
                                   get_rate(ln_found, ln_hit),
                                   get_rate(fn_found, fn_hit),
                                   get_rate(br_found, br_hit)]
-            overall_found  += ln_found
-            overall_hit    += ln_hit
+            total_ln_found += ln_found
+            total_ln_hit   += ln_hit
             total_fn_found += fn_found
             total_fn_hit   += fn_hit
             total_br_found += br_found
@@ -624,7 +624,7 @@ def gen_html():
         for $_ in @fileview_sortlist:
             write_dir_page(fileview_sortname[$_],
                            Path("."), Path(""), args.test_title, None,
-                           overall_found,  overall_hit,
+                           total_ln_found, total_ln_hit,
                            total_fn_found, total_fn_hit,
                            total_br_found, total_br_hit,
                            \%overview,
@@ -635,11 +635,11 @@ def gen_html():
         if test_description:
             info("Writing test case description file.")
             write_description_file(test_description,
-                                   overall_found,  overall_hit,
+                                   total_ln_found, total_ln_hit,
                                    total_fn_found, total_fn_hit,
                                    total_br_found, total_br_hit);
 
-        print_overall_rate(1,           overall_found,  overall_hit,
+        print_overall_rate(1,           total_ln_found, total_ln_hit,
                            fn_coverage, total_fn_found, total_fn_hit,
                            br_coverage, total_br_found, total_br_hit,
                            title="Overall coverage rate:")
@@ -665,7 +665,7 @@ def html_create(filename: Path) -> object:
 # NOK
 def write_dir_page($name,
                    rel_dir: Path, $base_dir, title: str, trunc_dir: Optionl[Path],
-                   overall_found: int,  overall_hit: int,
+                   total_ln_found: int, total_ln_hit: int,
                    total_fn_found: int, total_fn_hit: int,
                    total_br_found: int, total_br_hit: int,
                    overview: Dict[str, List],
@@ -687,7 +687,7 @@ def write_dir_page($name,
 
         write_header(html_handle, header_type,
                      trunc_dir, rel_dir,
-                     overall_found,  overall_hit,
+                     total_ln_found, total_ln_hit,
                      total_fn_found, total_fn_hit,
                      total_br_found, total_br_hit,
                      sort_type)
@@ -706,7 +706,6 @@ def process_dir(abs_dir):
     global args
     global info_data
 
-    my $filename;
     my %overview;
     my $ln_found;
     my $ln_hit;
@@ -742,23 +741,23 @@ def process_dir(abs_dir):
 
     # Match filenames which specify files in this directory, not including
     # sub-directories
-    overall_found  = 0
-    overall_hit    = 0
+    total_ln_found = 0
+    total_ln_hit   = 0
     total_fn_found = 0
     total_fn_hit   = 0
     total_br_found = 0
     total_br_hit   = 0
 
-    foreach $filename (grep(/^\Q$abs_dir\E\/[^\/]*$/,keys(%info_data))):
+    for filename in (grep(/^\Q$abs_dir\E\/[^\/]*$/,keys(%info_data))):
         my $page_link;
         my $func_link;
 
         (ln_found, ln_hit,
          fn_found, fn_hit,
          br_found, br_hit,
-         testdata, testfncdata, testbrdata) = process_file(trunc_dir, $rel_dir, $filename)
+         testdata, testfncdata, testbrdata) = process_file(trunc_dir, $rel_dir, filename)
 
-        $base_name = basename($filename);
+        $base_name = basename($filename)
 
         if options.no_sourceview:
             $page_link = "";
@@ -768,20 +767,20 @@ def process_dir(abs_dir):
         else:
             # Link directory to source code view page
             $page_link = f"$base_name.gcov.{options.html_ext}"
-        $overview{$base_name} = [ln_found, ln_hit,
-                                 fn_found, fn_hit,
-                                 br_found, br_hit,
-                                 $page_link,
-                                 get_rate(ln_found, ln_hit),
-                                 get_rate(fn_found, fn_hit),
-                                 get_rate(br_found, br_hit)]
+        $overview[base_name] = [ln_found, ln_hit,
+                                fn_found, fn_hit,
+                                br_found, br_hit,
+                                $page_link,
+                                get_rate(ln_found, ln_hit),
+                                get_rate(fn_found, fn_hit),
+                                get_rate(br_found, br_hit)]
 
-        $testhash{$base_name}    = testdata
-        $testfnchash{$base_name} = testfncdata
-        $testbrhash{$base_name}  = testbrdata
+        $testhash[base_name]    = testdata
+        $testfnchash[base_name] = testfncdata
+        $testbrhash[base_name]  = testbrdata
 
-        overall_found  += ln_found
-        overall_hit    += ln_hit
+        total_ln_found += ln_found
+        total_ln_hit   += ln_hit
         total_fn_found += fn_found
         total_fn_hit   += fn_hit
         total_br_found += br_found
@@ -792,7 +791,7 @@ def process_dir(abs_dir):
         # Generate directory overview page (without details)
         write_dir_page(fileview_sortname[$_],
                        Path($rel_dir), Path($base_dir), args.test_title, Path(trunc_dir),
-                       overall_found,  overall_hit,
+                       total_ln_found, total_ln_hit,
                        total_fn_found, total_fn_hit,
                        total_br_found, total_br_hit,
                        \%overview,
@@ -802,7 +801,7 @@ def process_dir(abs_dir):
         # Generate directory overview page including details
         write_dir_page(f"-detail{fileview_sortname[$_]}",
                        Path($rel_dir), Path($base_dir), args.test_title, Path(trunc_dir),
-                       overall_found,  overall_hit,
+                       total_ln_found, total_ln_hit,
                        total_fn_found, total_fn_hit,
                        total_br_found, total_br_hit,
                        \%overview,
@@ -810,7 +809,7 @@ def process_dir(abs_dir):
                        1, $_)
 
     # Calculate resulting line counts
-    return (overall_found,  overall_hit,
+    return (total_ln_found, total_ln_hit,
             total_fn_found, total_fn_hit,
             total_br_found, total_br_hit)
 
@@ -823,7 +822,7 @@ def process_file($trunc_dir, $rel_dir, $filename) -> Tuple ???:
 
     info("Processing file {}".format(apply_prefix(filename, @dir_prefix)))
 
-    base_name: str = basename($filename);
+    base_name: str = basename($filename)
     base_dir:  str = get_relative_base_path($rel_dir)
 
     my $testcount;
@@ -1427,22 +1426,19 @@ def get_dir_list(filename_list: List[str]) -> List[str]:
         result.add(shorten_prefix(fname))
     return sorted(result)
 
-# NOK
+
 def get_relative_base_path(subdir: str):
     """Return a relative path string which references the base path
-    when applied in SUBDIRECTORY.
+    when applied in subdir.
 
     Example: get_relative_base_path("fs/mm") -> "../../"
     """
     result = ""
     # Make an empty directory path a special case
     if subdir:
-        # Count number of /s in path
-        index = (subdir =~ s/\//\//g)
         # Add a ../ to result for each / in the directory path + 1
-        for (; index >= 0; index--):
+        for _ in range(subdir.count("/") + 1):
             result += "../"
-
     return result
 
 # NOK
@@ -1531,9 +1527,9 @@ def write_description_file(description: Dict[???, ???],
                            ln_found: int, ln_hit: int,
                            fn_found: int, fn_hit: int,
                            br_found: int, br_hit: int):
-    # write_description_file(descriptions, overall_found, overall_hit,
-    #                        total_fn_found, total_fn_hit, total_br_found,
-    #                        total_br_hit)
+    #                      total_ln_found, total_ln_hit,
+    #                      total_fn_found, total_fn_hit,
+    #                      total_br_found, total_br_hit)
     #
     """Write HTML file containing all test case descriptions.
     DESCRIPTIONS is a reference to a hash containing a mapping
@@ -1565,7 +1561,7 @@ def write_description_file(description: Dict[???, ???],
         write_test_table_epilog(html_handle)
         write_html_epilog(html_handle, Path(""))
 
-# NOK
+
 def write_png_files():
     """Create all necessary .png files for the HTML-output
     in the current directory. .png-files are used as bar graphs.
@@ -1577,188 +1573,199 @@ def write_png_files():
     data: Dict[str, object] = {}
 
     if options.dark_mode:
-        data["ruby.png"] =
-            [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00,
-             0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00,
-             0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x01, 0x03, 0x00,
-             0x00, 0x00, 0x25, 0xdb, 0x56, 0xca, 0x00, 0x00, 0x00,
-             0x06, 0x50, 0x4c, 0x54, 0x45, 0x80, 0x1b, 0x18, 0x00,
-             0x00, 0x00, 0x39, 0x4a, 0x74, 0xf4, 0x00, 0x00, 0x00,
-             0x0a, 0x49, 0x44, 0x41, 0x54, 0x08, 0xd7, 0x63, 0x60,
-             0x00, 0x00, 0x00, 0x02, 0x00, 0x01, 0xe2, 0x21, 0xbc,
-             0x33, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44,
-             0xae, 0x42, 0x60, 0x82]
+        data["ruby.png"] = bytearray(
+            b"\x89\x50\x4e\x47\x0d\x0a\x1a\x0a\x00"
+            b"\x00\x00\x0d\x49\x48\x44\x52\x00\x00"
+            b"\x00\x01\x00\x00\x00\x01\x01\x03\x00"
+            b"\x00\x00\x25\xdb\x56\xca\x00\x00\x00"
+            b"\x06\x50\x4c\x54\x45\x80\x1b\x18\x00"
+            b"\x00\x00\x39\x4a\x74\xf4\x00\x00\x00"
+            b"\x0a\x49\x44\x41\x54\x08\xd7\x63\x60"
+            b"\x00\x00\x00\x02\x00\x01\xe2\x21\xbc"
+            b"\x33\x00\x00\x00\x00\x49\x45\x4e\x44"
+            b"\xae\x42\x60\x82"
+        )
     else:
-        data["ruby.png"] =
-            [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00,
-             0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00,
-             0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x01, 0x03, 0x00,
-             0x00, 0x00, 0x25, 0xdb, 0x56, 0xca, 0x00, 0x00, 0x00,
-             0x07, 0x74, 0x49, 0x4d, 0x45, 0x07, 0xd2, 0x07, 0x11,
-             0x0f, 0x18, 0x10, 0x5d, 0x57, 0x34, 0x6e, 0x00, 0x00,
-             0x00, 0x09, 0x70, 0x48, 0x59, 0x73, 0x00, 0x00, 0x0b,
-             0x12, 0x00, 0x00, 0x0b, 0x12, 0x01, 0xd2, 0xdd, 0x7e,
-             0xfc, 0x00, 0x00, 0x00, 0x04, 0x67, 0x41, 0x4d, 0x41,
-             0x00, 0x00, 0xb1, 0x8f, 0x0b, 0xfc, 0x61, 0x05, 0x00,
-             0x00, 0x00, 0x06, 0x50, 0x4c, 0x54, 0x45, 0xff, 0x35,
-             0x2f, 0x00, 0x00, 0x00, 0xd0, 0x33, 0x9a, 0x9d, 0x00,
-             0x00, 0x00, 0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0xda,
-             0x63, 0x60, 0x00, 0x00, 0x00, 0x02, 0x00, 0x01, 0xe5,
-             0x27, 0xde, 0xfc, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45,
-             0x4e, 0x44, 0xae, 0x42, 0x60, 0x82]
+        data["ruby.png"] = bytearray(
+            b"\x89\x50\x4e\x47\x0d\x0a\x1a\x0a\x00"
+            b"\x00\x00\x0d\x49\x48\x44\x52\x00\x00"
+            b"\x00\x01\x00\x00\x00\x01\x01\x03\x00"
+            b"\x00\x00\x25\xdb\x56\xca\x00\x00\x00"
+            b"\x07\x74\x49\x4d\x45\x07\xd2\x07\x11"
+            b"\x0f\x18\x10\x5d\x57\x34\x6e\x00\x00"
+            b"\x00\x09\x70\x48\x59\x73\x00\x00\x0b"
+            b"\x12\x00\x00\x0b\x12\x01\xd2\xdd\x7e"
+            b"\xfc\x00\x00\x00\x04\x67\x41\x4d\x41"
+            b"\x00\x00\xb1\x8f\x0b\xfc\x61\x05\x00"
+            b"\x00\x00\x06\x50\x4c\x54\x45\xff\x35"
+            b"\x2f\x00\x00\x00\xd0\x33\x9a\x9d\x00"
+            b"\x00\x00\x0a\x49\x44\x41\x54\x78\xda"
+            b"\x63\x60\x00\x00\x00\x02\x00\x01\xe5"
+            b"\x27\xde\xfc\x00\x00\x00\x00\x49\x45"
+            b"\x4e\x44\xae\x42\x60\x82"
+        )
 
     if options.dark_mode:
-        data["amber.png"] =
-            [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00,
-             0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00,
-             0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x01, 0x03, 0x00,
-             0x00, 0x00, 0x25, 0xdb, 0x56, 0xca, 0x00, 0x00, 0x00,
-             0x06, 0x50, 0x4c, 0x54, 0x45, 0x99, 0x86, 0x30, 0x00,
-             0x00, 0x00, 0x51, 0x83, 0x43, 0xd7, 0x00, 0x00, 0x00,
-             0x0a, 0x49, 0x44, 0x41, 0x54, 0x08, 0xd7, 0x63, 0x60,
-             0x00, 0x00, 0x00, 0x02, 0x00, 0x01, 0xe2, 0x21, 0xbc,
-             0x33, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44,
-             0xae, 0x42, 0x60, 0x82]
+        data["amber.png"] = bytearray(
+            b"\x89\x50\x4e\x47\x0d\x0a\x1a\x0a\x00"
+            b"\x00\x00\x0d\x49\x48\x44\x52\x00\x00"
+            b"\x00\x01\x00\x00\x00\x01\x01\x03\x00"
+            b"\x00\x00\x25\xdb\x56\xca\x00\x00\x00"
+            b"\x06\x50\x4c\x54\x45\x99\x86\x30\x00"
+            b"\x00\x00\x51\x83\x43\xd7\x00\x00\x00"
+            b"\x0a\x49\x44\x41\x54\x08\xd7\x63\x60"
+            b"\x00\x00\x00\x02\x00\x01\xe2\x21\xbc"
+            b"\x33\x00\x00\x00\x00\x49\x45\x4e\x44"
+            b"\xae\x42\x60\x82"
+        )
     else:
-        data["amber.png"] =
-            [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00,
-             0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00,
-             0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x01, 0x03, 0x00,
-             0x00, 0x00, 0x25, 0xdb, 0x56, 0xca, 0x00, 0x00, 0x00,
-             0x07, 0x74, 0x49, 0x4d, 0x45, 0x07, 0xd2, 0x07, 0x11,
-             0x0f, 0x28, 0x04, 0x98, 0xcb, 0xd6, 0xe0, 0x00, 0x00,
-             0x00, 0x09, 0x70, 0x48, 0x59, 0x73, 0x00, 0x00, 0x0b,
-             0x12, 0x00, 0x00, 0x0b, 0x12, 0x01, 0xd2, 0xdd, 0x7e,
-             0xfc, 0x00, 0x00, 0x00, 0x04, 0x67, 0x41, 0x4d, 0x41,
-             0x00, 0x00, 0xb1, 0x8f, 0x0b, 0xfc, 0x61, 0x05, 0x00,
-             0x00, 0x00, 0x06, 0x50, 0x4c, 0x54, 0x45, 0xff, 0xe0,
-             0x50, 0x00, 0x00, 0x00, 0xa2, 0x7a, 0xda, 0x7e, 0x00,
-             0x00, 0x00, 0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0xda,
-             0x63, 0x60, 0x00, 0x00, 0x00, 0x02, 0x00, 0x01, 0xe5,
-             0x27, 0xde, 0xfc, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45,
-             0x4e, 0x44, 0xae, 0x42, 0x60, 0x82]
+        data["amber.png"] = bytearray(
+            b"\x89\x50\x4e\x47\x0d\x0a\x1a\x0a\x00"
+            b"\x00\x00\x0d\x49\x48\x44\x52\x00\x00"
+            b"\x00\x01\x00\x00\x00\x01\x01\x03\x00"
+            b"\x00\x00\x25\xdb\x56\xca\x00\x00\x00"
+            b"\x07\x74\x49\x4d\x45\x07\xd2\x07\x11"
+            b"\x0f\x28\x04\x98\xcb\xd6\xe0\x00\x00"
+            b"\x00\x09\x70\x48\x59\x73\x00\x00\x0b"
+            b"\x12\x00\x00\x0b\x12\x01\xd2\xdd\x7e"
+            b"\xfc\x00\x00\x00\x04\x67\x41\x4d\x41"
+            b"\x00\x00\xb1\x8f\x0b\xfc\x61\x05\x00"
+            b"\x00\x00\x06\x50\x4c\x54\x45\xff\xe0"
+            b"\x50\x00\x00\x00\xa2\x7a\xda\x7e\x00"
+            b"\x00\x00\x0a\x49\x44\x41\x54\x78\xda"
+            b"\x63\x60\x00\x00\x00\x02\x00\x01\xe5"
+            b"\x27\xde\xfc\x00\x00\x00\x00\x49\x45"
+            b"\x4e\x44\xae\x42\x60\x82"
+        )
 
     if options.dark_mode:
-        data["emerald.png"] =
-            [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00,
-             0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00,
-             0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x01, 0x03, 0x00,
-             0x00, 0x00, 0x25, 0xdb, 0x56, 0xca, 0x00, 0x00, 0x00,
-             0x06, 0x50, 0x4c, 0x54, 0x45, 0x00, 0x66, 0x00, 0x0a,
-             0x0a, 0x0a, 0xa4, 0xb8, 0xbf, 0x60, 0x00, 0x00, 0x00,
-             0x0a, 0x49, 0x44, 0x41, 0x54, 0x08, 0xd7, 0x63, 0x60,
-             0x00, 0x00, 0x00, 0x02, 0x00, 0x01, 0xe2, 0x21, 0xbc,
-             0x33, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44,
-             0xae, 0x42, 0x60, 0x82]
+        data["emerald.png"] = bytearray(
+            b"\x89\x50\x4e\x47\x0d\x0a\x1a\x0a\x00"
+            b"\x00\x00\x0d\x49\x48\x44\x52\x00\x00"
+            b"\x00\x01\x00\x00\x00\x01\x01\x03\x00"
+            b"\x00\x00\x25\xdb\x56\xca\x00\x00\x00"
+            b"\x06\x50\x4c\x54\x45\x00\x66\x00\x0a"
+            b"\x0a\x0a\xa4\xb8\xbf\x60\x00\x00\x00"
+            b"\x0a\x49\x44\x41\x54\x08\xd7\x63\x60"
+            b"\x00\x00\x00\x02\x00\x01\xe2\x21\xbc"
+            b"\x33\x00\x00\x00\x00\x49\x45\x4e\x44"
+            b"\xae\x42\x60\x82"
+        )
     else:
-        data["emerald.png"] =
-            [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00,
-             0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00,
-             0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x01, 0x03, 0x00,
-             0x00, 0x00, 0x25, 0xdb, 0x56, 0xca, 0x00, 0x00, 0x00,
-             0x07, 0x74, 0x49, 0x4d, 0x45, 0x07, 0xd2, 0x07, 0x11,
-             0x0f, 0x22, 0x2b, 0xc9, 0xf5, 0x03, 0x33, 0x00, 0x00,
-             0x00, 0x09, 0x70, 0x48, 0x59, 0x73, 0x00, 0x00, 0x0b,
-             0x12, 0x00, 0x00, 0x0b, 0x12, 0x01, 0xd2, 0xdd, 0x7e,
-             0xfc, 0x00, 0x00, 0x00, 0x04, 0x67, 0x41, 0x4d, 0x41,
-             0x00, 0x00, 0xb1, 0x8f, 0x0b, 0xfc, 0x61, 0x05, 0x00,
-             0x00, 0x00, 0x06, 0x50, 0x4c, 0x54, 0x45, 0x1b, 0xea,
-             0x59, 0x0a, 0x0a, 0x0a, 0x0f, 0xba, 0x50, 0x83, 0x00,
-             0x00, 0x00, 0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0xda,
-             0x63, 0x60, 0x00, 0x00, 0x00, 0x02, 0x00, 0x01, 0xe5,
-             0x27, 0xde, 0xfc, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45,
-             0x4e, 0x44, 0xae, 0x42, 0x60, 0x82]
+        data["emerald.png"] = bytearray(
+            b"\x89\x50\x4e\x47\x0d\x0a\x1a\x0a\x00"
+            b"\x00\x00\x0d\x49\x48\x44\x52\x00\x00"
+            b"\x00\x01\x00\x00\x00\x01\x01\x03\x00"
+            b"\x00\x00\x25\xdb\x56\xca\x00\x00\x00"
+            b"\x07\x74\x49\x4d\x45\x07\xd2\x07\x11"
+            b"\x0f\x22\x2b\xc9\xf5\x03\x33\x00\x00"
+            b"\x00\x09\x70\x48\x59\x73\x00\x00\x0b"
+            b"\x12\x00\x00\x0b\x12\x01\xd2\xdd\x7e"
+            b"\xfc\x00\x00\x00\x04\x67\x41\x4d\x41"
+            b"\x00\x00\xb1\x8f\x0b\xfc\x61\x05\x00"
+            b"\x00\x00\x06\x50\x4c\x54\x45\x1b\xea"
+            b"\x59\x0a\x0a\x0a\x0f\xba\x50\x83\x00"
+            b"\x00\x00\x0a\x49\x44\x41\x54\x78\xda"
+            b"\x63\x60\x00\x00\x00\x02\x00\x01\xe5"
+            b"\x27\xde\xfc\x00\x00\x00\x00\x49\x45"
+            b"\x4e\x44\xae\x42\x60\x82"
+        )
 
     if options.dark_mode:
-        data["snow.png"] =
-            [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00,
-             0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00,
-             0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x01, 0x03, 0x00,
-             0x00, 0x00, 0x25, 0xdb, 0x56, 0xca, 0x00, 0x00, 0x00,
-             0x06, 0x50, 0x4c, 0x54, 0x45, 0xdd, 0xdd, 0xdd, 0x00,
-             0x00, 0x00, 0xae, 0x9c, 0x6c, 0x92, 0x00, 0x00, 0x00,
-             0x0a, 0x49, 0x44, 0x41, 0x54, 0x08, 0xd7, 0x63, 0x60,
-             0x00, 0x00, 0x00, 0x02, 0x00, 0x01, 0xe2, 0x21, 0xbc,
-             0x33, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44,
-             0xae, 0x42, 0x60, 0x82]
+        data["snow.png"] = bytearray(
+            b"\x89\x50\x4e\x47\x0d\x0a\x1a\x0a\x00"
+            b"\x00\x00\x0d\x49\x48\x44\x52\x00\x00"
+            b"\x00\x01\x00\x00\x00\x01\x01\x03\x00"
+            b"\x00\x00\x25\xdb\x56\xca\x00\x00\x00"
+            b"\x06\x50\x4c\x54\x45\xdd\xdd\xdd\x00"
+            b"\x00\x00\xae\x9c\x6c\x92\x00\x00\x00"
+            b"\x0a\x49\x44\x41\x54\x08\xd7\x63\x60"
+            b"\x00\x00\x00\x02\x00\x01\xe2\x21\xbc"
+            b"\x33\x00\x00\x00\x00\x49\x45\x4e\x44"
+            b"\xae\x42\x60\x82"
+        )
     else:
-        data["snow.png"] =
-            [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00,
-             0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00,
-             0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x01, 0x03, 0x00,
-             0x00, 0x00, 0x25, 0xdb, 0x56, 0xca, 0x00, 0x00, 0x00,
-             0x07, 0x74, 0x49, 0x4d, 0x45, 0x07, 0xd2, 0x07, 0x11,
-             0x0f, 0x1e, 0x1d, 0x75, 0xbc, 0xef, 0x55, 0x00, 0x00,
-             0x00, 0x09, 0x70, 0x48, 0x59, 0x73, 0x00, 0x00, 0x0b,
-             0x12, 0x00, 0x00, 0x0b, 0x12, 0x01, 0xd2, 0xdd, 0x7e,
-             0xfc, 0x00, 0x00, 0x00, 0x04, 0x67, 0x41, 0x4d, 0x41,
-             0x00, 0x00, 0xb1, 0x8f, 0x0b, 0xfc, 0x61, 0x05, 0x00,
-             0x00, 0x00, 0x06, 0x50, 0x4c, 0x54, 0x45, 0xff, 0xff,
-             0xff, 0x00, 0x00, 0x00, 0x55, 0xc2, 0xd3, 0x7e, 0x00,
-             0x00, 0x00, 0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0xda,
-             0x63, 0x60, 0x00, 0x00, 0x00, 0x02, 0x00, 0x01, 0xe5,
-             0x27, 0xde, 0xfc, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45,
-             0x4e, 0x44, 0xae, 0x42, 0x60, 0x82]
+        data["snow.png"] = bytearray(
+            b"\x89\x50\x4e\x47\x0d\x0a\x1a\x0a\x00"
+            b"\x00\x00\x0d\x49\x48\x44\x52\x00\x00"
+            b"\x00\x01\x00\x00\x00\x01\x01\x03\x00"
+            b"\x00\x00\x25\xdb\x56\xca\x00\x00\x00"
+            b"\x07\x74\x49\x4d\x45\x07\xd2\x07\x11"
+            b"\x0f\x1e\x1d\x75\xbc\xef\x55\x00\x00"
+            b"\x00\x09\x70\x48\x59\x73\x00\x00\x0b"
+            b"\x12\x00\x00\x0b\x12\x01\xd2\xdd\x7e"
+            b"\xfc\x00\x00\x00\x04\x67\x41\x4d\x41"
+            b"\x00\x00\xb1\x8f\x0b\xfc\x61\x05\x00"
+            b"\x00\x00\x06\x50\x4c\x54\x45\xff\xff"
+            b"\xff\x00\x00\x00\x55\xc2\xd3\x7e\x00"
+            b"\x00\x00\x0a\x49\x44\x41\x54\x78\xda"
+            b"\x63\x60\x00\x00\x00\x02\x00\x01\xe5"
+            b"\x27\xde\xfc\x00\x00\x00\x00\x49\x45"
+            b"\x4e\x44\xae\x42\x60\x82"
+        )
 
-    data["glass.png"] =
-        [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00,
-         0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01,
-         0x00, 0x00, 0x00, 0x01, 0x01, 0x03, 0x00, 0x00, 0x00, 0x25,
-         0xdb, 0x56, 0xca, 0x00, 0x00, 0x00, 0x04, 0x67, 0x41, 0x4d,
-         0x41, 0x00, 0x00, 0xb1, 0x8f, 0x0b, 0xfc, 0x61, 0x05, 0x00,
-         0x00, 0x00, 0x06, 0x50, 0x4c, 0x54, 0x45, 0xff, 0xff, 0xff,
-         0x00, 0x00, 0x00, 0x55, 0xc2, 0xd3, 0x7e, 0x00, 0x00, 0x00,
-         0x01, 0x74, 0x52, 0x4e, 0x53, 0x00, 0x40, 0xe6, 0xd8, 0x66,
-         0x00, 0x00, 0x00, 0x01, 0x62, 0x4b, 0x47, 0x44, 0x00, 0x88,
-         0x05, 0x1d, 0x48, 0x00, 0x00, 0x00, 0x09, 0x70, 0x48, 0x59,
-         0x73, 0x00, 0x00, 0x0b, 0x12, 0x00, 0x00, 0x0b, 0x12, 0x01,
-         0xd2, 0xdd, 0x7e, 0xfc, 0x00, 0x00, 0x00, 0x07, 0x74, 0x49,
-         0x4d, 0x45, 0x07, 0xd2, 0x07, 0x13, 0x0f, 0x08, 0x19, 0xc4,
-         0x40, 0x56, 0x10, 0x00, 0x00, 0x00, 0x0a, 0x49, 0x44, 0x41,
-         0x54, 0x78, 0x9c, 0x63, 0x60, 0x00, 0x00, 0x00, 0x02, 0x00,
-         0x01, 0x48, 0xaf, 0xa4, 0x71, 0x00, 0x00, 0x00, 0x00, 0x49,
-         0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82]
+    data["glass.png"] = bytearray(
+        b"\x89\x50\x4e\x47\x0d\x0a\x1a\x0a\x00\x00"
+        b"\x00\x0d\x49\x48\x44\x52\x00\x00\x00\x01"
+        b"\x00\x00\x00\x01\x01\x03\x00\x00\x00\x25"
+        b"\xdb\x56\xca\x00\x00\x00\x04\x67\x41\x4d"
+        b"\x41\x00\x00\xb1\x8f\x0b\xfc\x61\x05\x00"
+        b"\x00\x00\x06\x50\x4c\x54\x45\xff\xff\xff"
+        b"\x00\x00\x00\x55\xc2\xd3\x7e\x00\x00\x00"
+        b"\x01\x74\x52\x4e\x53\x00\x40\xe6\xd8\x66"
+        b"\x00\x00\x00\x01\x62\x4b\x47\x44\x00\x88"
+        b"\x05\x1d\x48\x00\x00\x00\x09\x70\x48\x59"
+        b"\x73\x00\x00\x0b\x12\x00\x00\x0b\x12\x01"
+        b"\xd2\xdd\x7e\xfc\x00\x00\x00\x07\x74\x49"
+        b"\x4d\x45\x07\xd2\x07\x13\x0f\x08\x19\xc4"
+        b"\x40\x56\x10\x00\x00\x00\x0a\x49\x44\x41"
+        b"\x54\x78\x9c\x63\x60\x00\x00\x00\x02\x00"
+        b"\x01\x48\xaf\xa4\x71\x00\x00\x00\x00\x49"
+        b"\x45\x4e\x44\xae\x42\x60\x82"
+    )
 
     if options.sort;
         if options.dark_mode:
-            data["updown.png"] =
-                [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00,
-                 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00,
-                 0x00, 0x0a, 0x00, 0x00, 0x00, 0x0e, 0x08, 0x06, 0x00,
-                 0x00, 0x00, 0x16, 0xa3, 0x8d, 0xab, 0x00, 0x00, 0x00,
-                 0x43, 0x49, 0x44, 0x41, 0x54, 0x28, 0xcf, 0x63, 0x60,
-                 0x40, 0x03, 0x77, 0xef, 0xde, 0xfd, 0x7f, 0xf7, 0xee,
-                 0xdd, 0xff, 0xe8, 0xe2, 0x8c, 0xe8, 0x8a, 0x90, 0xf9,
-                 0xca, 0xca, 0xca, 0x8c, 0x18, 0x0a, 0xb1, 0x99, 0x82,
-                 0xac, 0x98, 0x11, 0x9f, 0x22, 0x64, 0xc5, 0x8c, 0x84,
-                 0x14, 0xc1, 0x00, 0x13, 0xc3, 0x80, 0x01, 0xea, 0xbb,
-                 0x91, 0xf8, 0xe0, 0x21, 0x29, 0xc0, 0x89, 0x89, 0x42,
-                 0x06, 0x62, 0x13, 0x05, 0x00, 0xe1, 0xd3, 0x2d, 0x91,
-                 0x93, 0x15, 0xa4, 0xb2, 0x00, 0x00, 0x00, 0x00, 0x49,
-                 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82]
+            data["updown.png"] = bytearray(
+                b"\x89\x50\x4e\x47\x0d\x0a\x1a\x0a\x00"
+                b"\x00\x00\x0d\x49\x48\x44\x52\x00\x00"
+                b"\x00\x0a\x00\x00\x00\x0e\x08\x06\x00"
+                b"\x00\x00\x16\xa3\x8d\xab\x00\x00\x00"
+                b"\x43\x49\x44\x41\x54\x28\xcf\x63\x60"
+                b"\x40\x03\x77\xef\xde\xfd\x7f\xf7\xee"
+                b"\xdd\xff\xe8\xe2\x8c\xe8\x8a\x90\xf9"
+                b"\xca\xca\xca\x8c\x18\x0a\xb1\x99\x82"
+                b"\xac\x98\x11\x9f\x22\x64\xc5\x8c\x84"
+                b"\x14\xc1\x00\x13\xc3\x80\x01\xea\xbb"
+                b"\x91\xf8\xe0\x21\x29\xc0\x89\x89\x42"
+                b"\x06\x62\x13\x05\x00\xe1\xd3\x2d\x91"
+                b"\x93\x15\xa4\xb2\x00\x00\x00\x00\x49"
+                b"\x45\x4e\x44\xae\x42\x60\x82"
+            )
         else:
-            data["updown.png"] =
-                [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00,
-                 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00,
-                 0x00, 0x0a, 0x00, 0x00, 0x00, 0x0e, 0x08, 0x06, 0x00,
-                 0x00, 0x00, 0x16, 0xa3, 0x8d, 0xab, 0x00, 0x00, 0x00,
-                 0x3c, 0x49, 0x44, 0x41, 0x54, 0x28, 0xcf, 0x63, 0x60,
-                 0x40, 0x03, 0xff, 0xa1, 0x00, 0x5d, 0x9c, 0x11, 0x5d,
-                 0x11, 0x8a, 0x24, 0x23, 0x23, 0x23, 0x86, 0x42, 0x6c,
-                 0xa6, 0x20, 0x2b, 0x66, 0xc4, 0xa7, 0x08, 0x59, 0x31,
-                 0x23, 0x21, 0x45, 0x30, 0xc0, 0xc4, 0x30, 0x60, 0x80,
-                 0xfa, 0x6e, 0x24, 0x3e, 0x78, 0x48, 0x0a, 0x70, 0x62,
-                 0xa2, 0x90, 0x81, 0xd8, 0x44, 0x01, 0x00, 0xe9, 0x5c,
-                 0x2f, 0xf5, 0xe2, 0x9d, 0x0f, 0xf9, 0x00, 0x00, 0x00,
-                 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82]
+            data["updown.png"] = bytearray(
+                b"\x89\x50\x4e\x47\x0d\x0a\x1a\x0a\x00"
+                b"\x00\x00\x0d\x49\x48\x44\x52\x00\x00"
+                b"\x00\x0a\x00\x00\x00\x0e\x08\x06\x00"
+                b"\x00\x00\x16\xa3\x8d\xab\x00\x00\x00"
+                b"\x3c\x49\x44\x41\x54\x28\xcf\x63\x60"
+                b"\x40\x03\xff\xa1\x00\x5d\x9c\x11\x5d"
+                b"\x11\x8a\x24\x23\x23\x23\x86\x42\x6c"
+                b"\xa6\x20\x2b\x66\xc4\xa7\x08\x59\x31"
+                b"\x23\x21\x45\x30\xc0\xc4\x30\x60\x80"
+                b"\xfa\x6e\x24\x3e\x78\x48\x0a\x70\x62"
+                b"\xa2\x90\x81\xd8\x44\x01\x00\xe9\x5c"
+                b"\x2f\xf5\xe2\x9d\x0f\xf9\x00\x00\x00"
+                b"\x00\x49\x45\x4e\x44\xae\x42\x60\x82"
+            )
 
     for fname, content in data.items():
         try:
             fhandle = Path(fname).open("wb")
         except:
-            die("ERROR: cannot create {fname}!")
+            die(f"ERROR: cannot create {fname}!")
         with fhandle:
-            fhandle.write(map(chr, content))
+            fhandle.write(content)
 
 
 def write_htaccess_file():
