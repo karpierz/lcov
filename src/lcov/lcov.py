@@ -1019,23 +1019,6 @@ def unlink_data_cb(datadir: Path, $rel, graphdir: Path):
     except Exception as exc:
         warn(f"WARNING: could not remove symlink {abs_to}: {exc}!")
 
-# NOK
-def find_graph(dir: Path) -> bool:
-    # Search DIR for a graph file.
-    # Return True if one was found, False otherwise.
-
-    count = 0
-
-    def find_graph_cb($dir, $rel, $count_ref):
-        # find_graph_cb(datadir, rel, count_ref)
-        #
-        # Count number of files found.
-        ($$count_ref)++;
-
-    lcov_find(dir, find_graph_cb, \$count, ["\.gcno$", "\.bb$", "\.bbg$"])
-
-    return count > 0
-
 
 def package_capture():
     """Capture coverage data from a package of unprocessed coverage data files
@@ -1068,6 +1051,21 @@ def package_capture():
             link_data(dir, args.base_directory, create=True)
             lcov_geninfo(args.base_directory)
             link_data(dir, args.base_directory, create=False)
+
+
+def find_graph(dir: Path) -> bool:
+    """Search dir for a graph file.
+    Return True if one was found, False otherwise.
+    """
+    count = [0]
+    lcov_find(dir, find_graph_cb, count, [r"\.gcno$", r"\.bb$", r"\.bbg$"])
+
+    return count[0] > 0
+
+
+def find_graph_cb(dir: Path, $rel, count: List[int]): # NOK
+    """Count number of files found."""
+    count[0] += 1
 
 
 def create_temp_dir() -> Path:
@@ -1175,7 +1173,7 @@ def read_info_file($tracefile) -> Dict[str, Dict[str, object]]:
         die("ERROR: not a plain file: $_[0]!")
 
     # Check for .gz extension
-    if ($_[0] =~ /\.gz$/):
+    if $_[0] =~ /\.gz$/:
         # Check for availability of GZIP tool
         if system_no_output(1, "gunzip" ,"-h")[0] != NO_ERROR:
             die("ERROR: gunzip command not available!")
@@ -2618,8 +2616,8 @@ def get_line_hash(filename: str,
                                                     Path(match.group(1) + path_data[diff_name]))
     return (diff_data[diff_name], old_path, new_path)
 
-# NOK
-def convert_paths($trace_data, path_conversion_data: Dict[str, str]):
+
+def convert_paths(trace_data: Dict[str, ???], path_conversion_data: Dict[str, str]): # NOK
     """Rename all paths in TRACE_DATA which show up in path_conversion_data."""
 
     if len(path_conversion_data) == 0:
@@ -2629,8 +2627,8 @@ def convert_paths($trace_data, path_conversion_data: Dict[str, str]):
     # Expand path conversion list
     for filename in list(path_conversion_data.keys()):
         new_path = path_conversion_data[filename]
-        while (($filename =~ s/^(.*)\/[^\/]+$/\1/) and
-               ($new_path =~ s/^(.*)\/[^\/]+$/\1/) and
+        while (($filename =~ s/^(.*)\/[^\/]+$/\1/) and # NOK
+               ($new_path =~ s/^(.*)\/[^\/]+$/\1/) and # NOK
                filename != new_path):
             path_conversion_data[filename] = new_path
 
@@ -2638,7 +2636,7 @@ def convert_paths($trace_data, path_conversion_data: Dict[str, str]):
     repeat = True
     while repeat:
         repeat = False
-        for filename in list($trace_data.keys()):
+        for filename in list(trace_data.keys()):
             # Find a path in our conversion table that matches, starting
             # with the longest path
             for $_ in sorted({length($b) <=> length($a)} path_conversion_data.keys()): # NOK
@@ -2646,11 +2644,11 @@ def convert_paths($trace_data, path_conversion_data: Dict[str, str]):
                 match = re.match(rf"^$_(.*)$", filename)
                 if not match: continue
 
-                new_path = path_conversion_data[$_] + match.group(1)
+                new_path = path_conversion_data[$_] + match.group(1) # NOK
 
                 # Make sure not to overwrite an existing entry under
                 # that path name
-                if trace_data[new_path]:
+                if new_path in trace_data:
                     # Need to combine entries
                     trace_data[new_path] = combine_info_entries(trace_data[filename],
                                                                 trace_data[new_path],
