@@ -445,20 +445,19 @@ def userspace_reset():
     """
     global args
 
-    maxdepth = "-maxdepth 1" if args.no_recursion else ""
-    follow   = "-follow"     if args.follow       else ""
+    follow = "-follow" if args.follow else "" # NOK
 
     for dir in args.directory:
         info("Deleting all .da files in {}{}".format(dir,
              ("" if args.no_recursion else " and subdirectories")))
-        # find files: "*.da" and "*.gcda" in $dir
-        file_list = `find "$dir" $maxdepth $follow -name \\*\\.da -type f -o -name \\*\\.gcda -type f 2>/dev/null` # NOK
-        for filename in file_list.striplines():
-            filename = Path(filename.strip())
-            try:
-                filename.unlink()
-            except:
-                die(f"ERROR: cannot remove file {filename}!")
+        for ext in ('*.da', '*.gcda'):
+            for filepath in (Path(dir).glob(ext)
+                             if args.no_recursion else
+                             Path(dir).rglob(ext)):
+                try:
+                    filepath.unlink()
+                except:
+                    die(f"ERROR: cannot remove file {filename}!")
 
 
 def userspace_capture():
@@ -564,7 +563,7 @@ def lcov_copy_fn(path_from: Path, $rel, path_to: Path):
     elif (-l):
         # Copy symbolic link
         try:
-            link = readlink($abs_from)
+            link = os.readlink(abs_from)
         except Exception as exc:
             die(f"ERROR: cannot read link {abs_from}: {exc}!")
         try:
@@ -806,10 +805,10 @@ def get_base(dir: Path) -> Tuple[Optional[Path], Optional[Path]]:
 
     # build base is parent of parent of markerfile link target.
     try:
-        link = readlink(str(marker_file)) # NOK
+        link = Path(os.readlink(str(marker_file)))
     except Exception as exc:
         die(f"ERROR: could not read {markerfile}")
-    build = Path(link).parent.parent.parent
+    build = link.parent.parent.parent
 
     return (sys_base, build)
 
@@ -1008,7 +1007,7 @@ def unlink_data_cb(datadir: Path, $rel, graphdir: Path):
     if not abs_to.is_symlink():
         return
     try:
-        target = readlink(abs_to) # NOK
+        target = Path(os.readlink(abs_to))
     except:
         return
     if target != abs_from:
@@ -1623,7 +1622,7 @@ def db_to_brcount(db: Dict[int, Dict[???, Dict[???, str]]], # NOK
     br_found = 0
     br_hit   = 0
     # Convert database back to brcount format
-    for line in sorted({$a <=> $b} db.keys()): # NOK
+    for line in sorted(db.keys()):
         ldata: Dict[???, Dict[???, str]] = db[line] # NOK
         brdata = ""
         for block in sorted({$a <=> $b} ldata.keys()): # NOK
@@ -2679,7 +2678,7 @@ def apply_diff(count_data: Dict[int, object],
     last_new: int = 0  # Last new line number found in line hash
     last_old: int = 0  # Last old line number found in line hash
     # Iterate all new line numbers found in the diff
-    for last_new in sorted({$a <=> $b} line_data.keys()): # NOK
+    for last_new in sorted(line_data.keys()):
         last_old = line_data[last_new]
         # Is there data associated with the corresponding old line?
         if last_old in count_data:
@@ -2687,7 +2686,7 @@ def apply_diff(count_data: Dict[int, object],
             result[last_new] = count_data[last_old]
 
     # Transform all other lines which come after the last diff entry
-    for line in sorted({$a <=> $b} count_data.keys()): # NOK
+    for line in sorted(count_data.keys()):
         # Skip lines which w ere covered by line hash
         if line <= last_old: continue
         # Copy data to new hash with an offset
