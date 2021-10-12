@@ -1104,12 +1104,12 @@ def read_info_file($tracefile) -> Dict[str, Dict[str, object]]:
     # %data: "test"    -> \%testdata
     #        "sum"     -> \%sumcount
     #        "func"    -> \%funcdata
-    #        "found"   -> $lines_found (number of instrumented lines found in file)
-    #        "hit"     -> $lines_hit (number of executed lines in file)
+    #        "found"   -> $ln_found (number of instrumented lines found in file)
+    #        "hit"     -> $ln_hit   (number of executed lines in file)
     #        "f_found" -> $fn_found (number of instrumented functions found in file)
-    #        "f_hit"   -> $fn_hit (number of executed functions in file)
+    #        "f_hit"   -> $fn_hit   (number of executed functions in file)
     #        "b_found" -> $br_found (number of instrumented branches found in file)
-    #        "b_hit"   -> $br_hit (number of executed branches in file)
+    #        "b_hit"   -> $br_hit   (number of executed branches in file)
     #        "check"   -> \%checkdata
     #        "testfnc" -> \%testfncdata
     #        "sumfnc"  -> \%sumfnccount
@@ -1221,13 +1221,13 @@ def read_info_file($tracefile) -> Dict[str, Dict[str, object]]:
                  _, _, _, _, _, _) = get_info_entry(data)
 
                 if defined($testname):
-                    $testcount    = $testdata[testname]
-                    $testfnccount = $testfncdata[testname]
-                    $testbrcount  = $testbrdata[testname]
+                    testcount    = $testdata[testname]
+                    testfnccount = $testfncdata[testname]
+                    testbrcount  = $testbrdata[testname]
                 else:
-                    $testcount    = {}
-                    $testfnccount = {}
-                    $testbrcount  = {}
+                    testcount    = {}
+                    testfnccount = {}
+                    testbrcount  = {}
                 continue
 
             match = re.match(r"^DA:(\d+),(-?\d+)(,[^,\s]+)?", line)
@@ -1298,9 +1298,9 @@ def read_info_file($tracefile) -> Dict[str, Dict[str, object]]:
                 if $filename:
                     # Store current section data
                     if defined($testname):
-                        $testdata[testname]    = $testcount
-                        $testfncdata[testname] = $testfnccount
-                        $testbrdata[testname]  = $testbrcount
+                        testdata[testname]    = testcount
+                        testfncdata[testname] = testfnccount
+                        testbrdata[testname]  = testbrcount
 
                     set_info_entry($data,
                                    $testdata, $sumcount, $funcdata, $checkdata,
@@ -1349,7 +1349,7 @@ def read_info_file($tracefile) -> Dict[str, Dict[str, object]]:
         for testname in testbrdata.keys():
             compress_brcount(testbrdata[testname])
 
-    if len(result) == 0:
+    if no result:
         die(f"ERROR: no valid records found in tracefile {tracefile}")
     if negative:
         warn(f"WARNING: negative counts found in tracefile {tracefile}")

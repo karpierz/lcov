@@ -213,10 +213,8 @@ our %opt_rc;
 options.missed;    # List/sort lines by missed counts
 options.dark_mode: bool = False  # Use dark mode palette or normal
 options.charset: str = "UTF-8"    # Default charset for HTML pages
-our @fileview_sortlist;
 
-fileview_sortname = ("", "-sort-l", "-sort-f", "-sort-b")
-our @funcview_sortlist;
+fileview_sortnames = ("", "-sort-l", "-sort-f", "-sort-b")
 our @rate_name = ("Lo", "Med", "Hi");
 our @rate_png = ("ruby.png", "amber.png", "emerald.png");
 options.lcov_function_coverage: bool = True
@@ -397,15 +395,15 @@ if options.no_prefix and @dir_prefix:
          "specified!")
     @dir_prefix = None
 
-@fileview_sortlist = [SORT_FILE]
-@funcview_sortlist = [SORT_FILE]
+fileview_sortlist: List[int] = [SORT_FILE]
+funcview_sortlist: List[int] = [SORT_FILE]
 if options.sort:
-    @fileview_sortlist.append(SORT_LINE)
+    fileview_sortlist.append(SORT_LINE)
     if options.fn_coverage:
-        @fileview_sortlist.append(SORT_FUNC)
+        fileview_sortlist.append(SORT_FUNC)
     if options.br_coverage:
-        @fileview_sortlist.append(SORT_BRANCH)
-    @funcview_sortlist.append(SORT_LINE)
+        fileview_sortlist.append(SORT_BRANCH)
+    funcview_sortlist.append(SORT_LINE)
 
 # Ensure that the c++filt tool is available when using --demangle-cpp
 if options.demangle_cpp:
@@ -490,7 +488,8 @@ def gen_html():
     global info_data
     global $base_filename
     global test_description
-    global fileview_sortname
+    global fileview_sortnames
+    global fileview_sortlist
 
     my %base_data;
 
@@ -604,15 +603,15 @@ def gen_html():
         info("Writing directory view page.")
 
         # Create sorted pages
-        for $_ in @fileview_sortlist:
-            write_dir_page(fileview_sortname[$_],
+        for sort_type in fileview_sortlist:
+            write_dir_page(fileview_sortnames[sort_type],
                            Path("."), Path(""), args.test_title, None,
                            total_ln_found, total_ln_hit,
                            total_fn_found, total_fn_hit,
                            total_br_found, total_br_hit,
                            \%overview,
                            {}, {}, {},
-                           0, $_)
+                           0, sort_type)
 
         # Check if there are any test case descriptions to write out
         if test_description:
@@ -688,6 +687,7 @@ def process_dir(abs_dir):
     global options
     global args
     global info_data
+    global fileview_sortlist
 
     my %overview;
     my $ln_found;
@@ -770,26 +770,26 @@ def process_dir(abs_dir):
         total_br_hit   += br_hit
 
     # Create sorted pages
-    for $_ in @fileview_sortlist:
+    for sort_type in fileview_sortlist:
         # Generate directory overview page (without details)
-        write_dir_page(fileview_sortname[$_],
+        write_dir_page(fileview_sortnames[sort_type],
                        Path($rel_dir), Path($base_dir), args.test_title, Path(trunc_dir),
                        total_ln_found, total_ln_hit,
                        total_fn_found, total_fn_hit,
                        total_br_found, total_br_hit,
                        \%overview,
                        {}, {}, {},
-                       1, $_)
+                       1, sort_type)
         if not options.show_details: continue
         # Generate directory overview page including details
-        write_dir_page(f"-detail{fileview_sortname[$_]}",
+        write_dir_page("-detail" + fileview_sortnames[sort_type],
                        Path($rel_dir), Path($base_dir), args.test_title, Path(trunc_dir),
                        total_ln_found, total_ln_hit,
                        total_fn_found, total_fn_hit,
                        total_br_found, total_br_hit,
                        \%overview,
                        \%testhash, \%testfnchash, \%testbrhash,
-                       1, $_)
+                       1, sort_type)
 
     # Calculate resulting line counts
     return (total_ln_found, total_ln_hit,
@@ -802,6 +802,7 @@ def process_file($trunc_dir, $rel_dir, $filename) -> Tuple ???:
     global options
     global args
     global info_data
+    global funcview_sortlist
 
     info("Processing file {}".format(apply_prefix(filename, @dir_prefix)))
 
@@ -850,16 +851,16 @@ def process_file($trunc_dir, $rel_dir, $filename) -> Tuple ???:
 
     if options.fn_coverage:
         # Create function tables
-        for line in @funcview_sortlist:
+        for sort_type in funcview_sortlist:
             write_function_page(Path($base_dir), Path($rel_dir), Path(trunc_dir),
                                 base_name, args.test_title,
                                 ln_found, ln_hit,
                                 fn_found, fn_hit,
                                 br_found, br_hit,
-                                $sumcount,    $funcdata,
-                                $sumfnccount, testfncdata,
-                                sumbrcount,  testbrdata,
-                                line)
+                                $funcdata,   $sumcount,
+                                testfncdata, sumfnccount,
+                                testbrdata,  sumbrcount,
+                                sort_type)
 
     # Additional files are needed in case of frame output
     if not $frames:
@@ -891,15 +892,15 @@ def write_function_page(base_dir: Path, rel_dir: Path, trunc_dir: Path,
                         $ln_found, $ln_hit,
                         $fn_found, $fn_hit,
                         $br_found, $br_hit,
-                        $sumcount,    $funcdata,
-                        $sumfnccount, $testfncdata,
-                        $sumbrcount,  $testbrdata,
+                        funcdata:    Dict[str, ???], sumcount:    Dict[???, ???],
+                        testfncdata: Dict[???, ???], sumfnccount: Dict[str, int],
+                        testbrdata:  Dict[???, ???], sumbrcount:  Dict[???, ???],
                         sort_type: int):
     """ """
     global options
 
     # Generate function table for this file
-    if sort_type == 0:
+    if sort_type == SORT_FILE:
         filename = rel_dir/f"$base_name.func.{options.html_ext}"
     else:
         filename = rel_dir/f"$base_name.func-sort-c.{options.html_ext}"
@@ -918,9 +919,9 @@ def write_function_page(base_dir: Path, rel_dir: Path, trunc_dir: Path,
 
         write_function_table(html_handle,
                              f"$base_name.gcov.{options.html_ext}",
-                             sumcount,    funcdata,
-                             sumfnccount, testfncdata,
-                             sumbrcount,  testbrdata,
+                             funcdata,    sumcount,
+                             testfncdata, sumfnccount,
+                             testbrdata,  sumbrcount,
                              $base_name, base_dir, sort_type)
 
         write_html_epilog(html_handle, base_dir, True)
@@ -928,14 +929,11 @@ def write_function_page(base_dir: Path, rel_dir: Path, trunc_dir: Path,
 # NOK
 def write_function_table(html_handle,
                          $source,
-                         $sumcount,   $funcdata,
-                         $sumfncdata, $testfncdata,
-                         $sumbrcount, $testbrdata,
+                         funcdata:    Dict[str, ???], sumcount:    Dict[???, ???],
+                         testfncdata: Dict[???, ???], sumfnccount: Dict[str, int],
+                         testbrdata:  Dict[???, ???], sumbrcount:  Dict[???, ???],
                          $name, base_dir: Path, sort_type: int):
-    # write_function_table(..., source_file,
-    #               sumfnccount, testfncdata,
-    #               base_name)
-    #
+    # (..., source_file, base_name, ...)
     """Write an HTML table listing all functions in a source file, including
     also function call counts and line coverages inside of each function.
 
@@ -944,53 +942,51 @@ def write_function_table(html_handle,
     global options
     global func_offset
 
-    my $func;
-    my $demangle;
-
     # Get HTML code for headings
-    $func_code  = funcview_get_func_code($name,  base_dir, sort_type)
-    $count_code = funcview_get_count_code($name, base_dir, sort_type)
+    func_code  = funcview_get_func_code($name,  base_dir, sort_type)
+    count_code = funcview_get_count_code($name, base_dir, sort_type)
 
-    write_html(html_handle, <<END_OF_HTML)
+    write_html(html_handle, <<END_OF_HTML) # NOK
       <center>
       <table width="60%" cellpadding=1 cellspacing=1 border=0>
         <tr><td><br></td></tr>
         <tr>
-          <td width="80%" class="tableHead">$func_code</td>
-          <td width="20%" class="tableHead">$count_code</td>
+          <td width="80%" class="tableHead">{func_code}</td>
+          <td width="20%" class="tableHead">{count_code}</td>
         </tr>
 END_OF_HTML
 
     # Get demangle translation hash
+    demangle: Dict[str, str] = {}
     if options.demangle_cpp:
-        $demangle = demangle_list(sorted($funcdata.keys()))
+        demangle = demangle_list(sorted(funcdata.keys()))
 
     # Get a sorted table
-    for $func in funcview_get_sorted($funcdata, $sumfncdata, sort_type):
-        if ! defined($funcdata->{$func}): continue
+    for func in funcview_get_sorted($funcdata, sumfnccount, sort_type):
+        if ! defined($funcdata[func]): continue
 
-        $startline = $funcdata->{$func} - func_offset
-        $name      = $func;
-        $count     = $sumfncdata->{$name};
+        startline = $funcdata[func] - func_offset
+        count     = sumfnccount[func]
 
         # Replace function name with demangled version if available
-        if exists($demangle->{$name}):
-            $name = $demangle->{$name}
+        name = func
+        if name in demangle:
+            name = demangle[name]
 
         # Escape special characters
-        $name = escape_html($name)
+        name = escape_html(name)
 
-        if $startline < 1: $startline = 1
-        countstyle = "coverFnLo" if $count == 0 else "coverFnHi"
+        if startline < 1: startline = 1
+        countstyle = "coverFnLo" if count == 0 else "coverFnHi"
 
-        write_html(html_handle, <<END_OF_HTML)
+        write_html(html_handle, <<END_OF_HTML) # NOK
         <tr>
-              <td class="coverFn"><a href="$source#$startline">$name</a></td>
-              <td class="{countstyle}">$count</td>
+              <td class="coverFn"><a href="$source#{startline}">{name}</a></td>
+              <td class="{countstyle}">{count}</td>
             </tr>
 END_OF_HTML
 
-    write_html(html_handle, <<END_OF_HTML)
+    write_html(html_handle, <<END_OF_HTML) # NOK
       </table>
       <br>
       </center>
@@ -1166,13 +1162,13 @@ def read_info_file($tracefile) -> Dict[???, ???]:
                      _, _, _, _, _, _) = get_info_entry($data)
 
                     if defined($testname):
-                        $testcount    = $testdata[testname]
-                        $testfnccount = testfncdata[testname]
-                        $testbrcount  = $testbrdata[testname]
+                        testcount    = testdata[testname]
+                        testfnccount = testfncdata[testname]
+                        testbrcount  = $testbrdata[testname]
                     else:
-                        $testcount    = {}
-                        $testfnccount = {}
-                        $testbrcount  = {}
+                        testcount    = {}
+                        testfnccount = {}
+                        testbrcount  = {}
 
                     last;
                 };
@@ -1302,15 +1298,15 @@ def read_info_file($tracefile) -> Dict[???, ???]:
             continue
 
         # Filter out empty test cases
-        for testname in keys(%{testdata}):
+        for testname in list(keys(%{testdata})):
             if (!defined(testdata[testname]) or
                 len(%{testdata[testname]}) == 0):
-                delete(testdata[testname])
-                delete(testfncdata[testname])
+                delete (testdata[testname])
+                delete (testfncdata[testname])
 
         data["found"] = len(sumcount)
         hitcount = 0
-        foreach (keys(%{sumcount})):
+        for $_ in (keys(%{sumcount})):
             if sumcount->{$_} > 0:
                 hitcount += 1
         data["hit"] = hitcount
@@ -1318,7 +1314,7 @@ def read_info_file($tracefile) -> Dict[???, ???]:
         # Get found/hit values for function call data
         data["f_found"] = len(sumfnccount)
         hitcount = 0
-        foreach (keys(%{sumfnccount})):
+        for $_ in (keys(%{sumfnccount})):
             if sumfnccount->{$_} > 0:
                 hitcount += 1
         data["f_hit"] = hitcount
@@ -1328,7 +1324,7 @@ def read_info_file($tracefile) -> Dict[???, ???]:
         for brcount in $testbrdata.values():
             compress_brcount(brcount)
 
-    if len(keys(%result)) == 0:
+    if no result:
         die(f"ERROR: no valid records found in tracefile {tracefile}")
     if $negative:
         warn(f"WARNING: negative counts found in tracefile {tracefile}")
@@ -2246,9 +2242,10 @@ END_OF_HTML
     # Fourth line
     write_header_epilog(html_handle, $base_dir)
 
-# NOK
-def get_sort_code(sort_link: Optional[str], alt: str, $base_dir: Path):
-   """ """
+
+def get_sort_code(sort_link: Optional[str], alt: str, base_dir: Path):
+    """ """
+    basedir = base_dir.as_posix()
     if sort_link is not None:
         png        = "updown.png"
         link_start = f'<a href="{sort_link}">'
@@ -2260,7 +2257,7 @@ def get_sort_code(sort_link: Optional[str], alt: str, $base_dir: Path):
 
     return (' '
             f'<span class="tableHeadSort">{link_start}'
-            f'<img src="{base_dir}{png}" width=10 height=14'
+            f'<img src="{basedir}/{png}" width=10 height=14'
             f' alt="{alt}" title="{alt}" border=0>{link_end}'
             f'</span>')
 
@@ -2395,7 +2392,7 @@ def get_file_code(view_type: int, text: str, sort_button: bool, base_dir: Path):
 def get_line_code(view_type: int, sort_type: int, text: str, sort_button: bool, base_dir: Path):
     """ """
     global options
-    global fileview_sortname
+    global fileview_sortnames
 
     result = text
     sort_link = None
@@ -2405,7 +2402,7 @@ def get_line_code(view_type: int, sort_type: int, text: str, sort_button: bool, 
             sort_link = f"index-sort-l.{options.html_ext}"
     elif view_type == HEAD_DETAIL_HIDDEN:
         # Text + link to detail view
-        sort_name = fileview_sortname[sort_type]
+        sort_name = fileview_sortnames[sort_type]
         result += (' ( <a class="detail"'
                    f' href="index-detail{sort_name}.{options.html_ext}">'
                    'show details</a> )')
@@ -2413,7 +2410,7 @@ def get_line_code(view_type: int, sort_type: int, text: str, sort_button: bool, 
             sort_link = f"index-sort-l.{options.html_ext}"
     else:
         # Text + link to standard view
-        sort_name = fileview_sortname[sort_type]
+        sort_name = fileview_sortnames[sort_type]
         result += (' ( <a class="detail"'
                    f' href="index{sort_name}.{options.html_ext}">'
                    'hide details</a> )')
@@ -2616,10 +2613,10 @@ def get_bar_graph_code(base_dir: Path, found, hit: int) -> str:
     remainder = 100 - width
     # Decide which .png file to use
     png_name  = $rate_png[classify_rate(found, hit,
-                                        options.med_limit, options.hi_limit)]
+                                        options.med_limit, options.hi_limit)] # NOK
     if width == 0:
         # Zero coverage
-        graph_code = (<<END_OF_HTML)
+        graph_code = (<<END_OF_HTML) # NOK
             <table border=0 cellspacing=0 cellpadding=1>
               <tr><td class="coverBarOutline">
                 <img src="{basedir}/snow.png" width=100 height=10 alt="{alt}">
@@ -2628,7 +2625,7 @@ def get_bar_graph_code(base_dir: Path, found, hit: int) -> str:
 END_OF_HTML
     elif width == 100:
         # Full coverage
-        graph_code = (<<END_OF_HTML)
+        graph_code = (<<END_OF_HTML) # NOK
         <table border=0 cellspacing=0 cellpadding=1>
           <tr><td class="coverBarOutline">
             <img src="{basedir}/{png_name}" width=100 height=10 alt="{alt}">
@@ -2637,17 +2634,17 @@ END_OF_HTML
 END_OF_HTML
     else:
         # Positive coverage
-        graph_code = (<<END_OF_HTML)
+        graph_code = (<<END_OF_HTML) # NOK
         <table border=0 cellspacing=0 cellpadding=1>
           <tr><td class="coverBarOutline">
-            <img src="{basedir}/{png_name}" width=$width height=10 alt="{alt}">
+            <img src="{basedir}/{png_name}" width={width} height=10 alt="{alt}">
             <img src="{basedir}/snow.png" width={remainder} height=10 alt="{alt}">
           </td></tr>
         </table>
 END_OF_HTML
 
     # Remove leading tabs from all lines
-    graph_code =~ s/^\t+//gm;, graph_code)
+    graph_code =~ s/^\t+//gm;, graph_code) # NOK
     graph_code = graph_code.rstrip("\n")
 
     return graph_code
@@ -3038,7 +3035,7 @@ def funcview_get_func_code(name: str, base_dir: Path, sort_type: int) -> str:
     global options
 
     sort_link = None
-    if options.sort and sort_type == 1:
+    if options.sort and sort_type == SORT_LINE:
         sort_link = f"{name}.func.{options.html_ext}"
 
     result = "Function Name"
@@ -3052,7 +3049,7 @@ def funcview_get_count_code(name: str, base_dir: Path, sort_type: int) -> str:
     global options
 
     sort_link = None
-    if options.sort and sort_type == 0:
+    if options.sort and sort_type == SORT_FILE:
         sort_link = f"{name}.func-sort-c.{options.html_ext}"
 
     result = "Hit count"
@@ -3061,17 +3058,17 @@ def funcview_get_count_code(name: str, base_dir: Path, sort_type: int) -> str:
     return result
 
 
-def funcview_get_sorted(funcdata:   Dict[???, ???],
-                        sumfncdata: Dict[???, ???],
-                        sort_type: int) -> List[???]: # NOK
+def funcview_get_sorted(funcdata:   Dict[str, ???], # NOK
+                        sumfnccount: Dict[str, int],
+                        sort_type: int) -> List[str]:
     """Depending on the value of sort_type, return a list of functions sorted
     by name (sort_type 0) or by the associated call count (sort_type 1)."""
-    if sort_type == 0:
+    if sort_type == SORT_FILE:
         return sorted(funcdata.keys())
     else:
-        return sorted({ a cmp b if sumfncdata[b] == sumfncdata[a]
-                        else sumfncdata[a] <=> sumfncdata[b]
-                      } sumfncdata.keys()) # NOK
+        return sorted({ a cmp b if sumfnccount[b] == sumfnccount[a]
+                        else sumfnccount[a] <=> sumfnccount[b]
+                      } sumfnccount.keys()) # NOK
 
 
 def subtract_counts(data: Dict[object, int],
