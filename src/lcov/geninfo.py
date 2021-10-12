@@ -667,7 +667,6 @@ def process_dafile(da_filename: Path, $dir):
     my @gcov_content;    # Content of a .gcov file
     my $gcov_branches;    # Branch content of a .gcov file
     my @gcov_functions;    # Function calls of a .gcov file
-    my $line_number;    # Line number count
     my $ln_hit;        # Number of instrumented lines hit
     my $ln_found;    # Number of instrumented lines found
     my $funcs_hit;        # Number of instrumented functions hit
@@ -993,18 +992,18 @@ def process_dafile(da_filename: Path, $dir):
                 printf(INFO_HANDLE "BRH:%s\n", $br_hit);
 
             # Reset line counters
-            $line_number = 0
-            $ln_found    = 0
-            $ln_hit      = 0
+            line_number = 0
+            ln_found    = 0
+            ln_hit      = 0
             # Write coverage information for each instrumented line
             # Note: @gcov_content contains a list of (flag, count, source)
             # tuple for each source code line
             while (@gcov_content):
-                $line_number += 1
+                line_number += 1
                 # Check for instrumented line
                 if $gcov_content[0]:
                     $ln_found += 1
-                    printf(INFO_HANDLE "DA:".$line_number.",".
+                    printf(INFO_HANDLE f"DA:{line_number},".
                            $gcov_content[1].($checksum ?
                            ",". md5_base64($gcov_content[2]) : "").
                            "\n");
@@ -1097,15 +1096,15 @@ def get_filenames(dirname: Path, pattern: str) -> List[str]:
     return result
 
 # NOK
-def match_filename($filename, @list) -> List:
+def match_filename($filename, @list) -> List[???]:
     # match_filename(gcov_filename, list)
     #
-    # Return a list of those entries of LIST which match the relative filename
-    # GCOV_FILENAME.
+    """Return a list of those entries of LIST which match the relative
+    filename GCOV_FILENAME.
+    """
+    result: List[???] = []
 
     $vol, $dir, $file = splitpath(filename)
-
-    result = []
 
     @comp = splitdir($dir)
     $comps = len(comp)
@@ -1114,13 +1113,12 @@ def match_filename($filename, @list) -> List:
         $evol, $edir, $efile = splitpath(entry)
 
         # Filename component must match
-        if ($efile != $file):
+        if $efile != $file:
             continue
 
         # Check directory components last to first for match
         @ecomp = splitdir($edir)
-        $ecomps = len(@ecomp)
-        if $ecomps < $comps:
+        if len(@ecomp) < $comps:
             continue
 
         for idx in range($comps):
@@ -1231,9 +1229,9 @@ def read_gcov_file(gcov_filename: Path) -> Tuple[Optional[???], Optional[???], O
     gcov_content is a list of 3 elements
     (flag, count, source) for each source code line:
 
-    $result[($line_number-1)*3+0] = instrumentation flag for line $line_number
-    $result[($line_number-1)*3+1] = execution count for line $line_number
-    $result[($line_number-1)*3+2] = source code text for line $line_number
+    $result[(line_number-1)*3+0] = instrumentation flag for line line_number
+    $result[(line_number-1)*3+1] = execution count      for line line_number
+    $result[(line_number-1)*3+2] = source code text     for line line_number
 
     gcov_branch is a vector of 4 4-byte long elements for each branch:
     line number, block number, branch number, count + 1 or 0
@@ -1730,9 +1728,9 @@ def intermediate_json_to_info(fhandle, $data, $srcdata):
         print("end_of_record",    file=fhandle)
 
 # NOK
-def get_output_fd($outfile, $file):
+def get_output_fd(outfile: Optional[???], $file):
     """ """
-    if ! defined($outfile):
+    if outfile is None:
         try:
             fhandle = Path(f"{file}.info").open("wt")
         except Exception as exc:
@@ -3373,7 +3371,7 @@ def solve_relative_path(path: Path, dir: str) -> str:
     return result
 
 # NOK
-def get_common_prefix($min_dir, @files):
+def get_common_prefix(min_dir: int, @files):
     # get_common_prefix(min_dir, filenames)
     #
     # Return the longest path prefix shared by all filenames. MIN_DIR specifies
@@ -3392,8 +3390,8 @@ def get_common_prefix($min_dir, @files):
             continue
 
         for ($i = 0; $i < len(comp) and $i < len(prefix); $i++):
-            if $comp[$i] != $prefix[$i] or (len(comp) - ($i + 1)) <= $min_dir:
-                delete(@prefix[$i..len(prefix)]);
+            if $comp[$i] != $prefix[$i] or (len(comp) - ($i + 1)) <= min_dir:
+                delete (@prefix[$i..len(prefix)]);
                 break
 
     return catdir(@prefix)
