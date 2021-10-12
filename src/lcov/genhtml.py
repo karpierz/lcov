@@ -166,15 +166,6 @@ ERROR_ID = {
     "source": ERROR_SOURCE,
 }
 
-# Data related prototypes
-sub process_dir($);
-
-# HTML related prototypes
-
-sub write_test_table_prolog(*$);
-sub write_test_table_entry(*$$);
-sub write_test_table_epilog(*);
-
 # Global variables & initialization
 our %info_data;        # Hash containing all data from .info file
 our @opt_dir_prefix;    # Array of prefixes to remove from all sub directories
@@ -230,7 +221,7 @@ our @rate_name = ("Lo", "Med", "Hi");
 our @rate_png = ("ruby.png", "amber.png", "emerald.png");
 options.lcov_function_coverage: bool = True
 options.lcov_branch_coverage:   bool = False
-options.rc_desc_html:           bool = False  # lcovrc: genhtml_desc_html
+options.desc_html:              bool = False  # lcovrc: genhtml_desc_html
 
 cwd = Path.cwd()  # Current working directory
 
@@ -278,7 +269,7 @@ if $config or %opt_rc:
         "genhtml_branch_field_width"  => \options.br_field_width,
         "genhtml_sort"                => \options.sort,
         "genhtml_charset"             => \options.charset,
-        "genhtml_desc_html"           => \options.rc_desc_html,
+        "genhtml_desc_html"           => \options.desc_html,
         "genhtml_demangle_cpp"        => \options.demangle_cpp,
         "genhtml_demangle_cpp_tool"   => \options.demangle_cpp_tool,
         "genhtml_demangle_cpp_params" => \options.demangle_cpp_params,
@@ -849,7 +840,7 @@ def process_file($trunc_dir, $rel_dir, $filename) -> Tuple ???:
                      ln_found, ln_hit,
                      fn_found, fn_hit,
                      br_found, br_hit,
-                     0)
+                     SORT_FILE)
 
         @source = write_source(html_handle, Path($filename),
                                sumcount, checkdata, converted,
@@ -1430,10 +1421,10 @@ def get_relative_base_path(subdir: str):
             result += "../"
     return result
 
-# NOK
+
 def read_testfile(test_filename: Path) -> Dict[str, str]:
-    """Read in file TEST_FILENAME which contains test descriptions
-    in the format:
+    """Read in file test_filename which contains test descriptions in the
+    format:
 
       TN:<whitespace><test name>
       TD:<whitespace><test description>
@@ -1462,7 +1453,7 @@ def read_testfile(test_filename: Path) -> Dict[str, str]:
             if match:
                 # Store test name for later use
                 test_name = match.group(1)
-                if (test_name =~ s/\W/_/g):
+                if (test_name =~ s/\W/_/g): # NOK
                     changed_testname = True
                 continue
 
@@ -1470,9 +1461,10 @@ def read_testfile(test_filename: Path) -> Dict[str, str]:
             match = re.match(r"^TD:\s+(.*?)\s*$", line)
             if match:
                 if test_name is None:
-                    die(f"ERROR: Found test description without prior test name in {test_filename}:$.")
-
-                if test_name not in result: result[test_name] = ""
+                    die("ERROR: Found test description without prior "
+                        f"test name in {test_filename}:$.")
+                if test_name not in result:
+                    result[test_name] = ""
                 # Check for empty line
                 if match.group(1):
                     # Add description to hash
@@ -1483,12 +1475,12 @@ def read_testfile(test_filename: Path) -> Dict[str, str]:
                 continue
 
     if changed_testname:
-        warn("WARNING: invalid characters removed from testname in "
-             f"descriptions file {test_filename}")
+        warn("WARNING: invalid characters removed from testname "
+             f"in descriptions file {test_filename}")
 
     return result
 
-# NOK
+
 def escape_html(string: str):
     """Return a copy of STRING in which all occurrences of HTML
     special characters are escaped.
@@ -1498,21 +1490,21 @@ def escape_html(string: str):
     if not string:
         return ""
 
-    string = string.replace("&", "&amp")    # & -> &amp;
-    string = string.replace("<", "&lt")     # < -> &lt;
-    string = string.replace(">", "&gt")     # > -> &gt;
+    string = string.replace("&",  "&amp")   # & -> &amp;
+    string = string.replace("<",  "&lt")    # < -> &lt;
+    string = string.replace(">",  "&gt")    # > -> &gt;
     string = string.replace("\"", "&quot")  # " -> &quot;
 
-    while ($string =~ /^([^\t]*)(\t)/):
-        $replacement = " " * (options.tab_size - (len($1) % options.tab_size))
-        $string =~ s/^([^\t]*)(\t)/$1$replacement/
+    while ($string =~ /^([^\t]*)(\t)/): # NOK
+        $replacement = " " * (options.tab_size - (len($1) % options.tab_size)) # NOK
+        $string =~ s/^([^\t]*)(\t)/$1$replacement/ # NOK
 
-    string = string.replace("\n", "<br>")  # \n -> <br>
+    string = string.replace("\n",  "<br>")  # \n -> <br>
 
     return string
 
-# NOK
-def write_description_file(description: Dict[???, ???],
+
+def write_description_file(descriptions: Dict[???, ???],
                            ln_found: int, ln_hit: int,
                            fn_found: int, fn_hit: int,
                            br_found: int, br_hit: int):
@@ -1521,7 +1513,7 @@ def write_description_file(description: Dict[???, ???],
     #                      total_br_found, total_br_hit)
     #
     """Write HTML file containing all test case descriptions.
-    DESCRIPTIONS is a reference to a hash containing a mapping
+    descriptions is a reference to a dict containing a mapping
 
       test case name -> test case description
 
@@ -1537,13 +1529,13 @@ def write_description_file(description: Dict[???, ???],
                      ln_found, ln_hit,
                      fn_found, fn_hit,
                      br_found, br_hit,
-                     0)
+                     SORT_FILE)
         write_test_table_prolog(html_handle,
                                 "Test case descriptions - alphabetical list")
 
-        for test_name in sorted(description.keys()):
-            desc = description[test_name]
-            if not options.rc_desc_html:
+        for test_name in sorted(descriptions.keys()):
+            desc = descriptions[test_name]
+            if not options.desc_html:
                 desc = escape_html(desc)
             write_test_table_entry(html_handle, test_name, desc)
 
@@ -1771,7 +1763,7 @@ END_OF_HTACCESS
     with fhandle
         print(htaccess_data, end="", file=fhandle)
 
-# NOK
+
 def write_css_file():
     """Write the cascading style sheet file gcov.css to the current directory.
     This file defines basic layout attributes of all generated HTML pages.
@@ -1782,68 +1774,66 @@ def write_css_file():
     if options.css_filename is not None:
         # Simply copy that file
         try:
-            system("cp", str(options.css_filename), "gcov.css")
+            shutil.copy2(str(options.css_filename), "gcov.css")
         except:
             die(f"ERROR: cannot copy file {css_filename}!")
-        return;
+        return
+
+    css_data = ($_=<<"END_OF_CSS") # NOK
+    # !!! read from html/genhtml.css
+END_OF_CSS
+    # Remove leading tab from all lines
+    css_data =~ s/^\t//gm;, css_data) # NOK
+
+    if options.dark_mode:
+        palette = {
+            "COLOR_00": "e4e4e4",
+            "COLOR_01": "58a6ff",
+            "COLOR_02": "8b949e",
+            "COLOR_03": "3b4c71",
+            "COLOR_04": "006600",
+            "COLOR_05": "4b6648",
+            "COLOR_06": "495366",
+            "COLOR_07": "143e4f",
+            "COLOR_08": "1c1e23",
+            "COLOR_09": "202020",
+            "COLOR_10": "801b18",
+            "COLOR_11": "66001a",
+            "COLOR_12": "772d16",
+            "COLOR_13": "796a25",
+            "COLOR_14": "000000",
+            "COLOR_15": "58a6ff",
+            "COLOR_16": "eeeeee",
+        }
+    else:
+        palette = {
+            "COLOR_00": "000000",
+            "COLOR_01": "00cb40",
+            "COLOR_02": "284fa8",
+            "COLOR_03": "6688d4",
+            "COLOR_04": "a7fc9d",
+            "COLOR_05": "b5f7af",
+            "COLOR_06": "b8d0ff",
+            "COLOR_07": "cad7fe",
+            "COLOR_08": "dae7fe",
+            "COLOR_09": "efe383",
+            "COLOR_10": "ff0000",
+            "COLOR_11": "ff0040",
+            "COLOR_12": "ff6230",
+            "COLOR_13": "ffea20",
+            "COLOR_14": "ffffff",
+            "COLOR_15": "284fa8",
+            "COLOR_16": "ffffff",
+        }
+    # Apply palette
+    for key, val in palette.items():
+        css_data = re.sub(rf"{key}", rf"{val}"gm, css_data) # NOK
 
     try:
         fhandle = Path("gcov.css").open("wt")
     except:
         die("ERROR: cannot open gcov.css for writing!")
-
-    css_data = ($_=<<"END_OF_CSS") # NOK
-    # !!! read from html/genhtml.css
-END_OF_CSS
-
     with fhandle:
-        # Remove leading tab from all lines
-        css_data =~ s/^\t//gm;, css_data)
-        if options.dark_mode:
-            palette = {
-                "COLOR_00": "e4e4e4",
-                "COLOR_01": "58a6ff",
-                "COLOR_02": "8b949e",
-                "COLOR_03": "3b4c71",
-                "COLOR_04": "006600",
-                "COLOR_05": "4b6648",
-                "COLOR_06": "495366",
-                "COLOR_07": "143e4f",
-                "COLOR_08": "1c1e23",
-                "COLOR_09": "202020",
-                "COLOR_10": "801b18",
-                "COLOR_11": "66001a",
-                "COLOR_12": "772d16",
-                "COLOR_13": "796a25",
-                "COLOR_14": "000000",
-                "COLOR_15": "58a6ff",
-                "COLOR_16": "eeeeee",
-            }
-        else:
-            palette = {
-                "COLOR_00": "000000",
-                "COLOR_01": "00cb40",
-                "COLOR_02": "284fa8",
-                "COLOR_03": "6688d4",
-                "COLOR_04": "a7fc9d",
-                "COLOR_05": "b5f7af",
-                "COLOR_06": "b8d0ff",
-                "COLOR_07": "cad7fe",
-                "COLOR_08": "dae7fe",
-                "COLOR_09": "efe383",
-                "COLOR_10": "ff0000",
-                "COLOR_11": "ff0040",
-                "COLOR_12": "ff6230",
-                "COLOR_13": "ffea20",
-                "COLOR_14": "ffffff",
-                "COLOR_15": "284fa8",
-                "COLOR_16": "ffffff",
-            }
-
-        # Apply palette
-        for key, val in palette.items():
-            css_data = re.sub(rf"{key}", rf"{val}"gm, css_data)
-
         print(css_data, end="", file=fhandle)
 
 
@@ -1887,23 +1877,24 @@ def write_html_prolog(html_handle, base_dir: Path, pagetitle: str):
 
     write_html(html_handle, prolog)
 
-# NOK
+
 def write_html_epilog(html_handle, base_dir: Path, break_frames: bool = False):
-    """Write HTML page footer to FILEHANDLE. BREAK_FRAMES should be set
-    when this page is embedded in a frameset, clicking the URL link will
+    """Write HTML page footer to html_handle. break_frames should be set
+    when this page is embedded in a frameset, clicking the url link will
     then break this frameset.
     """
+    global lcov_version, lcov_url
+
+    basedir    = base_dir.as_posix()
     break_code = ' target="_parent"' if break_frames is not None else ""
 
     write_html(html_handle, <<END_OF_HTML) # NOK
       <table width="100%" border=0 cellspacing=0 cellpadding=0>
-        <tr><td class="ruler"><img src="$_[1]glass.png" width=3 height=3 alt=""></td></tr>
-        <tr><td class="versionInfo">Generated by: <a href="$lcov_url"{break_code}>$lcov_version</a></td></tr>
+        <tr><td class="ruler"><img src="{basedir}/glass.png" width=3 height=3 alt=""></td></tr>
+        <tr><td class="versionInfo">Generated by: <a href="{lcov_url}"{break_code}>{lcov_version}</a></td></tr>
       </table>
       <br>
 END_OF_HTML
-
-    basedir = base_dir.as_posix()
 
     epilog = html_epilog
     epilog = re.sub(rf"\@basedir\@", rf"{basedir}", epilog)
@@ -3426,9 +3417,7 @@ def info(format, *pars, *, end="\n"):
 def main(argv=sys.argv[1:]):
     """\
     """
-    global tool_name
-    global lcov_version
-    global lcov_url
+    global tool_name, lcov_version, lcov_url
 
     def warn_handler(msg: str):
         global tool_name

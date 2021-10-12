@@ -3416,9 +3416,7 @@ def info(format, *pars, *, end="\n"):
 def main(argv=sys.argv[1:]):
     """\
     """
-    global tool_name
-    global lcov_version
-    global lcov_url
+    global tool_name, lcov_version, lcov_url
 
     # NOK
     def int_handler()

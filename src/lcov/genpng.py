@@ -198,9 +198,7 @@ def main(argv=sys.argv[1:]):
     Create an overview image for a given source code file of either
     plain text or .gcov file format.
     """
-    global tool_name
-    global lcov_version
-    global lcov_url
+    global tool_name, lcov_version, lcov_url
 
     def warn_handler(msg: str):
         global tool_name
