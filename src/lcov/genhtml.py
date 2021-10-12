@@ -168,15 +168,12 @@ ERROR_ID = {
 
 # Data related prototypes
 sub process_dir($);
-sub get_prefix($@);
 
 # HTML related prototypes
 
 sub write_test_table_prolog(*$);
 sub write_test_table_entry(*$$);
 sub write_test_table_epilog(*);
-
-sub write_frameset(*$$$);
 
 # Global variables & initialization
 our %info_data;        # Hash containing all data from .info file
@@ -886,7 +883,7 @@ def process_file($trunc_dir, $rel_dir, $filename) -> Tuple ???:
 
     # Create frameset page
     with html_create(Path(f"$rel_dir/$base_name.gcov.frameset.{options.html_ext}")) as html_handle:
-        write_frameset(html_handle, $base_dir, base_name, page_title)
+        write_frameset(html_handle, Path($base_dir), base_name, page_title)
 
     # Write overview frame
     with html_create(Path(f"$rel_dir/$base_name.gcov.overview.{options.html_ext}")) as html_handle:
@@ -1350,59 +1347,58 @@ def read_info_file($tracefile) -> Dict[???, ???]:
 
     return (\%result)
 
-# NOK
-def get_prefix($min_dir, @filename_list):
-    # Search FILENAME_LIST for a directory prefix which is common to as many
-    # list entries as possible, so that removing this prefix will minimize the
-    # sum of the lengths of all resulting shortened filenames while observing
-    # that no filename has less than MIN_DIR parent directories.
 
-    my %prefix;   # mapping: prefix -> sum of lengths
-    my $current;  # Temporary iteration variable
+def get_prefix(min_dir: int, filename_list: List[str]) -> Optional[str]:
+    """Search filename_list for a directory prefix which is common to as many
+    list entries as possible, so that removing this prefix will minimize the
+    sum of the lengths of all resulting shortened filenames while observing
+    that no filename has less than min_dir parent directories.
+    """
+    prefix = {}  # mapping: prefix -> sum of lengths
 
     # Find list of prefixes
-    for $current in @filename_list:
-        while ($current = shorten_prefix($current)):
-            $current += "/"
-
+    for current in filename_list:
+        while True:
+            current = shorten_prefix(current)
+            if not current: break
+            current += "/"
             # Skip rest if the remaining prefix has already been
             # added to hash
-            if (exists($prefix{$current})) { last; }
-
+            if current in prefix: break
             # Initialize with 0
-            $prefix{$current} = "0"
+            prefix[current] = "0"
 
     # Remove all prefixes that would cause filenames to have less than
     # the minimum number of parent directories
-    for $filename in (@filename_list):
-        my $dir = dirname($filename);
-        for (my $i = 0; $i < $min_dir; $i++):
-            delete($prefix{$dir."/"});
-            $dir = shorten_prefix($dir);
+    for filename in filename_list:
+        dir = dirname($filename) # NOK
+        for _ in range(min_dir):
+            del ($prefix{f"{dir}/"}) # NOK
+            dir = shorten_prefix(dir)
 
     # Check if any prefix remains
-    if (!%prefix):
-        return _
+    if not prefix:
+        return None
 
     # Calculate sum of lengths for all prefixes
-    for $current in %prefix.keys():
-        for $_ in (@filename_list):
+    for current in prefix.keys():
+        for filename in filename_list:
             # Add original length
-            $prefix{$current} += length($_)
+            prefix[current] += len(filename)
             # Check whether prefix matches
-            if substr($_, 0, length($current)) == $current:
+            if filename[:len(current) == current:
                 # Subtract prefix length for this filename
-                $prefix{$current} -= length($current)
+                prefix[current] -= len(current)
 
     # Find and return prefix with minimal sum
-    $current = %prefix.keys()[0]
-    for pkey in %prefix.keys():
-        if $prefix{pkey} < $prefix{$current}:
-            $current = pkey
+    current = prefix.keys()[0]
+    for pkey, pval in prefix.items():
+        if pval < prefix[current]:
+            current = pkey
 
-    $current =~ s/\/$//;
+    $current =~ s/\/$// # NOK
 
-    return $current
+    return current
 
 
 def shorten_prefix(prefix: str, sep: str = "/") -> str:
@@ -1508,7 +1504,7 @@ def escape_html(string: str):
     string = string.replace("\"", "&quot")  # " -> &quot;
 
     while ($string =~ /^([^\t]*)(\t)/):
-        $replacement = " " * (options.tab_size - (length($1) % options.tab_size))
+        $replacement = " " * (options.tab_size - (len($1) % options.tab_size))
         $string =~ s/^([^\t]*)(\t)/$1$replacement/
 
     string = string.replace("\n", "<br>")  # \n -> <br>
@@ -1883,11 +1879,11 @@ def write_html_prolog(html_handle, base_dir: Path, pagetitle: str):
     """
     global html_prolog
 
-    basedir = base_dir
+    basedir = base_dir.as_posix()
 
     prolog = html_prolog
-    prolog = re.sub(rf"\@pagetitle\@", rf"{pagetitle}",          prolog)
-    prolog = re.sub(rf"\@basedir\@",   rf"{basedir.as_posix()}", prolog)
+    prolog = re.sub(rf"\@pagetitle\@", rf"{pagetitle}", prolog)
+    prolog = re.sub(rf"\@basedir\@",   rf"{basedir}",   prolog)
 
     write_html(html_handle, prolog)
 
@@ -1907,10 +1903,10 @@ def write_html_epilog(html_handle, base_dir: Path, break_frames: bool = False):
       <br>
 END_OF_HTML
 
-    basedir = base_dir
+    basedir = base_dir.as_posix()
 
     epilog = html_epilog
-    epilog = re.sub(rf"\@basedir\@", rf"{basedir.as_posix()}", epilog)
+    epilog = re.sub(rf"\@basedir\@", rf"{basedir}", epilog)
 
     write_html(html_handle, epilog)
 
@@ -1980,10 +1976,11 @@ def get_block_len(block: List[???]) -> int: # NOK
     return sum((branch[BR_LEN] for branch in block), 0)
 
 # NOK
-def write_frameset(html_handle, basedir: str, basename: str, pagetitle: str):
+def write_frameset(html_handle, base_dir: Path, basename: str, pagetitle: str):
     """ """
     global options
 
+    basedir     = base_dir.as_posix()
     frame_width = options.overview_width + 40
 
     write_html(html_handle, <<END_OF_HTML) # NOK
@@ -1994,7 +1991,7 @@ def write_frameset(html_handle, basedir: str, basename: str, pagetitle: str):
     <head>
       <meta http-equiv="Content-Type" content=f"text/html; charset={options.charset}">
       <title>{pagetitle}</title>
-      <link rel="stylesheet" type="text/css" href="{basedir}gcov.css">
+      <link rel="stylesheet" type="text/css" href="{basedir}/gcov.css">
     </head>
 
     <frameset cols="{frame_width},*">
@@ -2009,11 +2006,11 @@ def write_frameset(html_handle, basedir: str, basename: str, pagetitle: str):
 END_OF_HTML
 
 # NOK
-def write_overview(html_handle, basedir: Path, basename, pagetitle: str, lines: int   *$$$$):
+def write_overview(html_handle, base_dir: Path, basename, pagetitle: str, lines: int   *$$$$):
     """ """
     global options
 
-    basedir = basedir.as_posix()
+    basedir  = base_dir.as_posix()
     max_line = lines - 1
 
     write_html(html_handle, <<END_OF_HTML) # NOK
@@ -2024,7 +2021,7 @@ def write_overview(html_handle, basedir: Path, basename, pagetitle: str, lines: 
     <head>
       <title>{pagetitle}</title>
       <meta http-equiv="Content-Type" content=f"text/html; charset={options.charset}">
-      <link rel="stylesheet" type="text/css" href="{basedir}gcov.css">
+      <link rel="stylesheet" type="text/css" href="{basedir}/gcov.css">
     </head>
 
     <body>
