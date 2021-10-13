@@ -1,4 +1,4 @@
-# Copyright (c) 2019-2020 Adam Karpierz
+# Copyright (c) 2019-2022 Adam Karpierz
 # Licensed under the zlib/libpng License
 # https://opensource.org/licenses/Zlib
 
@@ -7,8 +7,6 @@ include CHANGES.rst
 include LICENSE
 include pyproject.toml
 
-prune arch
-
 graft docs
 
 graft examples
@@ -16,7 +14,6 @@ graft examples
 graft src
 
 graft tests
-prune tests/tests.c
 
 global-exclude \#* \#*/**
 global-exclude .build .build/** .build.* .build.*/**
