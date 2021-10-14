@@ -3357,7 +3357,7 @@ def demangle_list(func_list: List[str]) -> Dict[str, str]:
     # get demangled properly.
     demangle_args = options.demangle_cpp_params
     if demangle_args == "" and $^O == "darwin": # NOK
-        demangle_args = "--no-strip-underscores"
+        demangle_args = "--no-strip-underscore"
     # Build translation hash from c++filt output
     try:
         process = subprocess.run([options.demangle_cpp_tool, demangle_args],

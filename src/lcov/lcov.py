@@ -822,7 +822,7 @@ def find_link_fn(path_from: Path, rel, filename):
     return abs_file if abs_file.is_symlink() else None
 
 # NOK
-def apply_base_dir($data: Path, $base: Optional[Path], $build, dirs: List) -> List:
+def apply_base_dir($data: Path, $base: Optional[Path], $build, dirs: List[???]) -> List:
     # apply_base_dir(data_dir, base_dir, build_dir, @directories)
     # Make entries in @directories relative to data_dir.
     global args

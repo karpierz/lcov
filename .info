@@ -1,6 +1,7 @@
 Repo: https://github.com/linux-test-project/lcov.git
 Based on:
-v1.15-4-gd1d3024
-commit d1d3024a8c82ee0a4c2afe948008a18415db9091
-Author: henry2cox <68852529+henry2cox@users.noreply.github.com>
-Date:   Wed Jul 28 05:25:23 2021 -0400
+v1.15-5-g462f71d
+commit 462f71ddbad726b2c9968fefca31d60a9f0f745f
+Author: Lars Bilke <lars.bilke@ufz.de>
+Date:   Tue Jun 15 13:17:53 2021 +0200
+
