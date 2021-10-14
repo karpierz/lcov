@@ -1,135 +1,112 @@
--------------------------------------------------
-- README file for the LTP GCOV extension (LCOV) -
-- Last changes: 2019-02-28                      -
--------------------------------------------------
+lcov
+====
 
-Description
------------
-  LCOV is an extension of GCOV, a GNU tool which provides information about
-  what parts of a program are actually executed (i.e. "covered") while running
-  a particular test case. The extension consists of a set of Perl scripts
-  which build on the textual GCOV output to implement the following enhanced
-  functionality:
+Compile all py files in a wheel to pyc files.
 
-    * HTML based output: coverage rates are additionally indicated using bar
-      graphs and specific colors.
+Overview
+========
 
-    * Support for large projects: overview pages allow quick browsing of
-      coverage data by providing three levels of detail: directory view,
-      file view and source code view.
+|package_bold| is a strict fork of Grant Patten's pycwheel_ package
+with a fixes allowing to work with Python3 or higher and with a code
+reformatting and some improvements.
 
-  LCOV was initially designed to support Linux kernel coverage measurements,
-  but works as well for coverage measurements on standard user space
-  applications.
+`PyPI record`_.
 
+`Documentation`_.
 
-Further README contents
------------------------
-  1. Included files
-  2. Installing LCOV
-  3. An example of how to access kernel coverage data
-  4. An example of how to access coverage data for a user space program
-  5. Questions and Comments
+Usage
+-----
 
+Processing the wheel in place:
 
+.. code-block:: bash
 
-1. Important files
-------------------
-  README             - This README file
-  CHANGES            - List of changes between releases
-  bin/lcov           - Tool for capturing LCOV coverage data
-  bin/genhtml        - Tool for creating HTML output from LCOV data
-  bin/gendesc        - Tool for creating description files as used by genhtml
-  bin/geninfo        - Internal tool (creates LCOV data files)
-  bin/genpng         - Internal tool (creates png overviews of source files)
-  bin/install.sh     - Internal tool (takes care of un-/installing)
-  man                - Directory containing man pages for included tools
-  example            - Directory containing an example to demonstrate LCOV
-  lcov.cfg           - LCOV configuration file
-  Makefile           - Makefile providing 'install' and 'uninstall' targets
+    $ python -m pyc_wheel your_wheel-1.0.0-py3-none-any.whl
+    # Output: your_wheel-1.0.0-py3-none-any.whl
 
+or with backup:
 
-2. Installing LCOV
-------------------
-The LCOV package is available as either RPM or tarball from:
-     
-  http://ltp.sourceforge.net/coverage/lcov.php
+.. code-block:: bash
 
-To install the tarball, unpack it to a directory and run:
+    $ python -m pyc_wheel --with_backup your_wheel-1.0.0-py3-none-any.whl
+    # Output: your_wheel-1.0.0-py3-none-any.whl
+    #         your_wheel-1.0.0-py3-none-any.whl.bak
 
-  make install
+or with quiet:
 
-Use Git for the most recent (but possibly unstable) version:
+.. code-block:: bash
 
-  git clone https://github.com/linux-test-project/lcov.git
+    $ python -m pyc_wheel --quiet your_wheel-1.0.0-py3-none-any.whl
+    # Output: your_wheel-1.0.0-py3-none-any.whl
 
-Change to the resulting lcov directory and type:
+Installation
+============
 
-  make install
+Prerequisites:
 
++ Python 3.6 or higher
 
-3. An example of how to access kernel coverage data
----------------------------------------------------
-Requirements: get and install the gcov-kernel package from
+  * https://www.python.org/
+  * 3.7 is a primary test environment.
 
-  http://sourceforge.net/projects/ltp
++ pip and setuptools
 
-Copy the resulting gcov kernel module file to either the system wide modules
-directory or the same directory as the Perl scripts. As root, do the following:
+  * https://pypi.org/project/pip/
+  * https://pypi.org/project/setuptools/
 
-  a) Resetting counters
+To install run:
 
-     lcov --zerocounters
+  .. parsed-literal::
 
-  b) Capturing the current coverage state to a file
+    python -m pip install --upgrade |package|
 
-     lcov --capture --output-file kernel.info
+Development
+===========
 
-  c) Getting HTML output
+Prerequisites:
 
-     genhtml kernel.info
++ Development is strictly based on *tox*. To install it run::
 
-Point the web browser of your choice to the resulting index.html file.
+    python -m pip install --upgrade tox
 
+Visit `development page`_.
 
-4. An example of how to access coverage data for a user space program
----------------------------------------------------------------------
-Requirements: compile the program in question using GCC with the options
--fprofile-arcs and -ftest-coverage. During linking, make sure to specify
--lgcov or -coverage.
+Installation from sources:
 
-Assuming the compile directory is called "appdir", do the following:
+clone the sources:
 
-  a) Resetting counters
+  .. parsed-literal::
 
-     lcov --directory appdir --zerocounters
+    git clone |respository| |package|
 
-  b) Capturing the current coverage state to a file
+and run:
 
-     lcov --directory appdir --capture --output-file app.info
+  .. parsed-literal::
 
-     Note that this step only works after the application has
-     been started and stopped at least once. Otherwise lcov will
-     abort with an error mentioning that there are no data/.gcda files.
+    python -m pip install ./|package|
 
-  c) Getting HTML output
+or on development mode:
 
-     genhtml app.info
+  .. parsed-literal::
 
-Point the web browser of your choice to the resulting index.html file.
+    python -m pip install --editable ./|package|
 
-Please note that independently of where the application is installed or
-from which directory it is run, the --directory statement needs to
-point to the directory in which the application was compiled.
+License
+=======
 
-For further information on the gcc profiling mechanism, please also
-consult the gcov man page.
+  | Copyright (c) 2012-2022 Adam Karpierz
+  | Licensed under the zlib/libpng License
+  | https://opensource.org/licenses/Zlib
+  | Please refer to the accompanying LICENSE file.
 
+Authors
+=======
 
-5. Questions and comments
--------------------------
-See the included man pages for more information on how to use the LCOV tools.
+* Adam Karpierz <adam@karpierz.net>
 
-Please email further questions or comments regarding this tool to the
-LTP Mailing list at ltp-coverage@lists.sourceforge.net  
-
+.. |package| replace:: lcov
+.. |package_bold| replace:: **lcov**
+.. |respository| replace:: https://github.com/karpierz/lcov.git
+.. _development page: https://github.com/karpierz/lcov
+.. _PyPI record: https://pypi.org/project/lcov/
+.. _Documentation: https://lcov.readthedocs.io/
