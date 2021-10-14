@@ -1,6 +1,6 @@
-# Copyright (c) 2019-2022 Adam Karpierz
-# Licensed under the zlib/libpng License
-# https://opensource.org/licenses/Zlib
+# Copyright (c) 2020-2022, Adam Karpierz
+# Licensed under the BSD license
+# https://opensource.org/licenses/BSD-3-Clause
 
 __import__("pkg_about").about()
-__copyright__ = f"Copyright (c) 2019-2022 {__author__}"
+__copyright__ = f"Copyright (c) 2020-2022 {__author__}"

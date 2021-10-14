@@ -10,6 +10,11 @@ Overview
 with a fixes allowing to work with Python3 or higher and with a code
 reformatting and some improvements.
 
+|package_bold| is a graphical front-end for GCC's coverage testing tool gcov.
+It collects gcov data for multiple source files and creates HTML pages
+containing the source code annotated with coverage information. It also adds
+overview pages for easy navigation within the file structure.
+
 `PyPI record`_.
 
 `Documentation`_.
@@ -94,9 +99,9 @@ or on development mode:
 License
 =======
 
-  | Copyright (c) 2012-2022 Adam Karpierz
-  | Licensed under the zlib/libpng License
-  | https://opensource.org/licenses/Zlib
+  | Copyright (c) 2020-2022, Adam Karpierz
+  | Licensed under the BSD license
+  | https://opensource.org/licenses/BSD-3-Clause
   | Please refer to the accompanying LICENSE file.
 
 Authors

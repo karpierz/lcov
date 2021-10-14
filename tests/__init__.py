@@ -1,6 +1,6 @@
-# Copyright (c) 2019-2022 Adam Karpierz
-# Licensed under the zlib/libpng License
-# https://opensource.org/licenses/Zlib
+# Copyright (c) 2020-2022, Adam Karpierz
+# Licensed under the BSD license
+# https://opensource.org/licenses/BSD-3-Clause
 
 __all__ = ('top_dir', 'test_dir')
 
