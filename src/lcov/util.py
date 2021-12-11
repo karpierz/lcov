@@ -52,7 +52,7 @@ def remove_items_from_dict(dict: Dict, fns: List):
 
 NO_ERROR = 0
 
-def system_no_output(mode: int, *args) -> Tuple[int, Optional[???], Optional[???]]:
+def system_no_output(mode: int, *args) -> Tuple[int, Optional["???"], Optional["???"]]:
     """Call an external program using ARGS while suppressing
     depending on the value of MODE:
 

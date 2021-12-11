@@ -1,4 +1,4 @@
-from typing import TypeVar, Any, Dict, 
+from typing import TypeVar, Any, List, Dict
 
 #ModuleAware = TypeVar('ModuleAware')
 
@@ -10,11 +10,11 @@ BranchCountData = Dict[int, str]
 
 ChecksumData = Dict[int, object]
 
-BlockData = Dict[???, str]
+BlockData = Dict["???", str]
 
 LineData = Dict[object, BlockData]
-#          Dict[???, Dict[???, str]]
+#          Dict["???", Dict["???", str]]
 
-#    Dict[int, Dict[???, Dict[???, str]]]
+#    Dict[int, Dict["???", Dict["???", str]]]
 DB = Dict[int, LineData]
 
