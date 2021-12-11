@@ -61,6 +61,7 @@ import argparse
 import sys
 import re
 from pathlib import Path
+import gzip
 
 from .lcov import add_counts
 from .lcov import add_fnccount
@@ -171,16 +172,16 @@ ERROR_ID = {
 }
 
 # Global variables & initialization
-our %info_data;        # Hash containing all data from .info file
+info_data: Dict[str, ???] = {}  # Hash containing all data from .info file
 our @opt_dir_prefix;    # Array of prefixes to remove from all sub directories
 our @dir_prefix;
 test_description: Dict[str, str] = {}  # Hash containing test descriptions if available
 our $date = get_date_string()
 
-info_filenames: List[str] = [] # List of .info files to use as data source
+args.info_filenames: List[Path] = [] # List of .info files to use as data source
 args.test_title: Optional[str] = None  # Title for output as written to each page header
 our $output_directory;    # Name of directory in which to store output
-our $base_filename;    # Optional name of file containing baseline data
+args.base_filename: Optional[Path] = None  # Optional name of file containing baseline data
 our $desc_filename;    # Name of file containing test descriptions
 options.css_filename: Optional[Path] = None  # Optional name of external stylesheet file to use
 args.quiet: bool = False  # If set, suppress information messages
@@ -192,9 +193,9 @@ options.fn_coverage:     Optionsl[bool] = None  # If set, generate function cove
 options.no_fn_coverage:  Optionsl[bool] = None  # Disable fn_coverage
 options.br_coverage:     Optionsl[bool] = None  # If set, generate branch coverage statistics
 options.no_br_coverage:  Optionsl[bool] = None  # Disable br_coverage
-options.sort = True      # If set, provide directory listings with sorted entries
-$no_sort;        # Disable sort
-our $frames;        # If set, use frames for source code view
+options.sort:    bool = True   # If set, provide directory listings with sorted entries
+options.no_sort: bool = False  # Disable sort
+args.frames: Optional[bool] = None  # If set, use frames for source code view
 options.keep_descriptions: bool = False  # If set, do not remove unused test case descriptions
 options.no_sourceview: bool = False  # If set, do not create a source code view for each file
 options.highlight: Optional[bool] = None  # If set, highlight lines covered by converted data only
@@ -212,18 +213,20 @@ options.demangle_cpp_tool:   str = "c++filt"  # Default demangler for C++ functi
 options.demangle_cpp_params: str = ""         # Extra parameters for demangling
 args.ignore_errors:     List[str] = []    # Ignore certain error classes during processing
 ignore: Dict[int, bool] = {}  # List of errors to ignore (array)
-our $opt_config_file;    # User-specified configuration file location
-our %opt_rc;
+args.config_file: Optional[Path] = None  # User-specified configuration file location
+args.rc:          Dict[str, str] = {}
 options.missed;    # List/sort lines by missed counts
 options.dark_mode: bool = False  # Use dark mode palette or normal
 options.charset: str = "UTF-8"    # Default charset for HTML pages
-
-fileview_sortnames = ("", "-sort-l", "-sort-f", "-sort-b")
-our @rate_name = ("Lo", "Med", "Hi");
-our @rate_png = ("ruby.png", "amber.png", "emerald.png");
 options.lcov_function_coverage: bool = True
 options.lcov_branch_coverage:   bool = False
 options.desc_html:              bool = False  # lcovrc: genhtml_desc_html
+
+fileview_sortnames = ("", "-sort-l", "-sort-f", "-sort-b")
+our @rate_name = ("Lo", "Med", "Hi")
+our @rate_png  = ("ruby.png", "amber.png", "emerald.png")
+
+html_templates_dir: Path = Path(__file__)/"html"
 
 cwd = Path.cwd()  # Current working directory
 
@@ -233,16 +236,16 @@ cwd = Path.cwd()  # Current working directory
 
 # Check command line for a configuration file name
 Getopt::Long::Configure("pass_through", "no_auto_abbrev")
-GetOptions("config-file=s" => \$opt_config_file,
-           "rc=s%"         => \%opt_rc)
+GetOptions("config-file=s" => \Path(args.config_file),
+           "rc=s%"         => \args.rc)
 Getopt::Long::Configure("default")
 
 # Remove spaces around rc options
-%opt_rc = strip_spaces_in_options(%opt_rc)
+args.rc = strip_spaces_in_options(args.rc)
 # Read configuration file if available
-$config = read_lcov_config_file($opt_config_file)
+$config = read_lcov_config_file(args.config_file)
 
-if $config or %opt_rc:
+if $config or args.rc:
 {
     # Copy configuration file and --rc values to variables
     apply_config({
@@ -299,13 +302,13 @@ if (!GetOptions(
         "description-file|d=s" => \$desc_filename,
         "keep-descriptions|k"  => \options.keep_descriptions,
         "css-file|c=s"         => \Path(options.css_filename),
-        "baseline-file|b=s"    => \$base_filename,
+        "baseline-file|b=s"    => \Path(args.base_filename),
         "prefix|p=s"           => \@opt_dir_prefix,
         "num-spaces=i"         => \options.tab_size,
         "no-prefix"            => \options.no_prefix,
         "no-sourceview"        => \options.no_sourceview,
         "show-details|s"       => \options.show_details,
-        "frames|f"             => \$frames,
+        "frames|f"             => \args.frames,
         "highlight"            => \options.highlight,
         "legend"               => \options.legend,
         "quiet|q"              => \args.quiet,
@@ -323,8 +326,8 @@ if (!GetOptions(
         "no-sort"              => \options.no_sort,
         "demangle-cpp"         => \options.demangle_cpp,
         "ignore-errors=s"      => \args.ignore_errors,
-        "config-file=s"        => \$opt_config_file,
-        "rc=s%"                => \%opt_rc,
+        "config-file=s"        => \Path(args.config_file),
+        "rc=s%"                => \args.rc,
         "precision=i"          => \options.default_precision,
         "missed"               => \options.missed,
         "dark-mode"            => \options.dark_mode,
@@ -340,7 +343,7 @@ if options.no_br_coverage:
 if options.no_sort:
     options.sort = False
 
-info_filenames = @ARGV;
+args.info_filenames = [Path(fname) for fname in @ARGV]
 
 # Check for help option
 if args.help:
@@ -358,15 +361,15 @@ parse_ignore_errors(args.ignore_errors, ignore)
 parse_dir_prefix(@opt_dir_prefix)
 
 # Check for info filename
-if not info_filenames:
+if not args.info_filenames:
     die("No filename specified\n"
         f"Use {tool_name} --help to get usage information")
 
 # Generate a title if none is specified
 if not args.test_title:
-    if len(info_filenames) == 1:
+    if len(args.info_filenames) == 1:
         # Only one filename specified, use it as title
-        args.test_title = basename(info_filenames[0])
+        args.test_title = basename(args.info_filenames[0])
     else:
         # More than one filename specified, used default title
         args.test_title = "unnamed"
@@ -388,10 +391,10 @@ html_prolog = get_html_prolog(options.html_prolog_file or None)
 html_epilog = get_html_epilog(options.html_epilog_file or None)
 
 # Issue a warning if --no-sourceview is enabled together with --frames
-if options.no_sourceview and defined($frames):
+if options.no_sourceview and args.frames is not None:
     warn("WARNING: option --frames disabled because --no-sourceview "
          "was specified!")
-    $frames = None
+    args.frames = None
 
 # Issue a warning if --no-prefix is enabled together with --prefix
 if options.no_prefix and @dir_prefix:
@@ -488,42 +491,38 @@ def gen_html():
     """
     global options
     global args
-    global info_filenames
     global info_data
-    global $base_filename
     global test_description
     global fileview_sortnames
     global fileview_sortlist
 
-    my %base_data;
-
     try:
         # Read in all specified .info files
-        for $_ in info_filenames:
-            current = read_info_file($_)
+        for fname in args.info_filenames:
+            current = read_info_file(fname)
             # Combine current with info_data
             info_data = combine_info_files(info_data, current)
 
         info("Found %d entries.", len(info_data))
 
         # Read and apply baseline data if specified
-        if $base_filename:
+        if args.base_filename:
             # Read baseline file
             info(f"Reading baseline file {base_filename}")
-            %base_data = read_info_file($base_filename)
-            info("Found %d entries.", len(%base_data))
+            base_data = read_info_file(args.base_filename)
+            info("Found %d entries.", len(base_data))
             # Apply baseline
             info("Subtracting baseline data.")
-            info_data = apply_baseline(info_data, %base_data)
+            info_data = apply_baseline(info_data, base_data)
 
-        dir_list: List[str] = get_dir_list(%info_data.keys())
+        dir_list: List[str] = get_dir_list(info_data.keys())
 
         if options.no_prefix:
             # User requested that we leave filenames alone
             info("User asked not to remove filename prefix")
         elif not @dir_prefix:
             # Get prefix common to most directories in list
-            prefix = get_prefix(1, %info_data.keys())
+            prefix = get_prefix(1, info_data.keys())
             if prefix:
                 info(f"Found common filename prefix \"{prefix}\"")
                 $dir_prefix[0] = prefix
@@ -638,7 +637,7 @@ def html_create(filename: Path) -> object:
     global options
     if options.html_gzip:
         try:
-            html_handle = open("|-", f"gzip -c >'{filename}'") # NOK
+            html_handle = gzip.open(str(filename), "wt") as:
         except:
             die(f"ERROR: cannot open {filename} for writing (gzip)!")
     else:
@@ -702,9 +701,6 @@ def process_dir(abs_dir):
     my $br_hit;
     my $base_name;
     my $extension;
-    my %testhash;
-    my %testfnchash;
-    my %testbrhash;
     my @sort_list;
 
     rel_dir = $abs_dir
@@ -728,6 +724,11 @@ def process_dir(abs_dir):
 
     # Match filenames which specify files in this directory, not including
     # sub-directories
+
+    %testhash    = {}
+    %testfnchash = {}
+    %testbrhash  = {}
+
     total_ln_found = 0
     total_ln_hit   = 0
     total_fn_found = 0
@@ -748,7 +749,7 @@ def process_dir(abs_dir):
 
         if options.no_sourceview:
             $page_link = "";
-        elif $frames:
+        elif args.frames:
             # Link to frameset page
             $page_link = f"$base_name.gcov.frameset.{options.html_ext}"
         else:
@@ -867,7 +868,7 @@ def process_file($trunc_dir, $rel_dir, $filename) -> Tuple ???:
                                 sort_type)
 
     # Additional files are needed in case of frame output
-    if not $frames:
+    if not args.frames:
         return (ln_found, ln_hit,
                 fn_found, fn_hit,
                 br_found, br_hit,
@@ -944,12 +945,14 @@ def write_function_table(html_handle,
     Die on error.
     """
     global options
+    global html_templates_dir
     global func_offset
 
     # Get HTML code for headings
     func_code  = funcview_get_func_code($name,  base_dir, sort_type)
     count_code = funcview_get_count_code($name, base_dir, sort_type)
 
+    html = (html_templates_dir/"").read_text()
     write_html(html_handle, <<END_OF_HTML) # NOK
       <center>
       <table width="60%" cellpadding=1 cellspacing=1 border=0>
@@ -983,6 +986,7 @@ END_OF_HTML
         if startline < 1: startline = 1
         countstyle = "coverFnLo" if count == 0 else "coverFnHi"
 
+        html = (html_templates_dir/"").read_text()
         write_html(html_handle, <<END_OF_HTML) # NOK
         <tr>
               <td class="coverFn"><a href="$source#{startline}">{name}</a></td>
@@ -990,6 +994,7 @@ END_OF_HTML
             </tr>
 END_OF_HTML
 
+    html = (html_templates_dir/"").read_text()
     write_html(html_handle, <<END_OF_HTML) # NOK
       </table>
       <br>
@@ -1023,7 +1028,7 @@ def get_converted_lines(testdata: Dict[str, Dict[???, ???]]) -> Set[int]: # NOK
     return result
 
 # NOK
-def read_info_file($tracefile) -> Dict[???, ???]:
+def read_info_file($tracefile: Path) -> Dict[str, Dict[str, object]]:
     """
     read_info_file(info_filename)
 
@@ -1336,7 +1341,7 @@ def read_info_file($tracefile) -> Dict[???, ???]:
         warn("WARNING: invalid characters removed from testname in "
              f"tracefile {tracefile}")
 
-    return (\%result)
+    return %result
 
 
 def get_prefix(min_dir: int, filename_list: List[str]) -> Optional[str]:
@@ -1400,14 +1405,15 @@ def shorten_prefix(prefix: str, sep: str = "/") -> str:
 
 
 def get_dir_list(filename_list: List[str]) -> List[str]:
-    """Return sorted list of directories for each entry in given FILENAME_LIST."""
+    """Return sorted list of directories for each entry in given
+    filename_list."""
     result = set()
     for fname in filename_list:
         result.add(shorten_prefix(fname))
     return sorted(result)
 
 
-def get_relative_base_path(subdir: str):
+def get_relative_base_path(subdir: str) -> str:
     """Return a relative path string which references the base path
     when applied in subdir.
 
@@ -1751,17 +1757,14 @@ def write_png_files():
 
 def write_htaccess_file():
     """ """
+    global html_templates_dir
     try:
         fhandle = Path(".htaccess").open("wt")
     except:
         die("ERROR: cannot open .htaccess for writing!")
-
-    htaccess_data = (<<"END_OF_HTACCESS") # NOK
-AddEncoding x-gzip .html
-END_OF_HTACCESS
-
+    htaccess = (html_templates_dir/".htaccess").read_text()
     with fhandle
-        print(htaccess_data, end="", file=fhandle)
+        print(htaccess, end="", file=fhandle)
 
 
 def write_css_file():
@@ -1769,6 +1772,7 @@ def write_css_file():
     This file defines basic layout attributes of all generated HTML pages.
     """
     global options
+    global html_templates_dir
 
     # Check for a specified external style sheet file
     if options.css_filename is not None:
@@ -1779,9 +1783,7 @@ def write_css_file():
             die(f"ERROR: cannot copy file {css_filename}!")
         return
 
-    css_data = ($_=<<"END_OF_CSS") # NOK
-    # !!! read from html/genhtml.css
-END_OF_CSS
+    css_data = (html_templates_dir/"genhtml.css").read_text(encoding="utf-8")
     # Remove leading tab from all lines
     css_data =~ s/^\t//gm;, css_data) # NOK
 
@@ -1849,15 +1851,15 @@ def classify_rate(found: int, hit: int, med_limit: int, hi_limit: int) -> int:
     return 2
 
 
-def write_html(html_handle, html_code: str):
+def write_html(html_handle, html: str):
     """Write out HTML_CODE to html_handle while removing a leading tabulator mark
     in each line of HTML_CODE.
 
     Remove leading tab from all lines
     """
-    html_code = re.sub(s/^\t//gm;, "", html_code) # NOK
+    html = re.sub(s/^\t//gm;, "", html) # NOK
     try:
-        print(html_code, end="", file=html_handle)
+        print(html, end="", file=html_handle)
     except Exception as exc:
         die(f"ERROR: cannot write HTML data ({exc})")
 
@@ -1884,10 +1886,12 @@ def write_html_epilog(html_handle, base_dir: Path, break_frames: bool = False):
     then break this frameset.
     """
     global lcov_version, lcov_url
+    global html_templates_dir
 
     basedir    = base_dir.as_posix()
     break_code = ' target="_parent"' if break_frames is not None else ""
 
+    html = (html_templates_dir/"").read_text()
     write_html(html_handle, <<END_OF_HTML) # NOK
       <table width="100%" border=0 cellspacing=0 cellpadding=0>
         <tr><td class="ruler"><img src="{basedir}/glass.png" width=3 height=3 alt=""></td></tr>
@@ -1904,16 +1908,16 @@ END_OF_HTML
 
 def write_header_prolog(html_handle, base_dir):
     """Write beginning of page header HTML code."""
-    # !!! read from html/header_prolog.html
-    write_html(html_handle, <<END_OF_HTML) # NOK
-END_OF_HTML
+    global html_templates_dir
+    html = (html_templates_dir/"header_prolog.html").read_text()
+    write_html(html_handle, html)
 
 
 def write_header_epilog(html_handle, base_dir)
     """Write end of page header HTML code."""
-    # !!! read from html/header_epilog.html
-    write_html(html_handle, <<END_OF_HTML) # NOK
-END_OF_HTML
+    global html_templates_dir
+    html = (html_templates_dir/"header_epilog.html").read_text()
+    write_html(html_handle, html)
 
 
 def write_header_line(handle, content: List[???]): # NOK
@@ -1933,20 +1937,22 @@ def write_header_line(handle, content: List[???]): # NOK
 
 def write_test_table_prolog(html_handle, table_heading)
     """Write heading for test case description table."""
-    # !!! read from html/test_table_prolog.html
-    write_html(html_handle, <<END_OF_HTML) # NOK
-END_OF_HTML
+    global html_templates_dir
+    html = (html_templates_dir/"test_table_prolog.html").read_text()
+    write_html(html_handle, html)
 
 
 def write_test_table_epilog(html_handle):
     """Write end of test description table HTML code."""
-    # !!! read from html/test_table_epilog.html
-    write_html(html_handle, <<END_OF_HTML) # NOK
-END_OF_HTML
+    global html_templates_dir
+    html = (html_templates_dir/"test_table_epilog.html").read_text()
+    write_html(html_handle, html)
 
 
 def write_test_table_entry(html_handle, test_name: str, test_description: str):
     """Write entry for the test table."""
+    global html_templates_dir
+    html = (html_templates_dir/"").read_text()
     write_html(html_handle, <<END_OF_HTML) # NOK
           <dt>{test_name}<a name="{test_name}">&nbsp;</a></dt>
           <dd>test_description<br><br></dd>
@@ -1970,10 +1976,12 @@ def get_block_len(block: List[???]) -> int: # NOK
 def write_frameset(html_handle, base_dir: Path, basename: str, pagetitle: str):
     """ """
     global options
+    global html_templates_dir
 
     basedir     = base_dir.as_posix()
     frame_width = options.overview_width + 40
 
+    html = (html_templates_dir/"").read_text()
     write_html(html_handle, <<END_OF_HTML) # NOK
     <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Frameset//EN">
 
@@ -2000,10 +2008,12 @@ END_OF_HTML
 def write_overview(html_handle, base_dir: Path, basename, pagetitle: str, lines: int   *$$$$):
     """ """
     global options
+    global html_templates_dir
 
     basedir  = base_dir.as_posix()
     max_line = lines - 1
 
+    html = (html_templates_dir/"").read_text()
     write_html(html_handle, <<END_OF_HTML) # NOK
     <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
 
@@ -2028,6 +2038,7 @@ END_OF_HTML
         # Enforce nav_offset
         write_overview_line(html_handle, basename, index, max(1, index - offset))
 
+    html = (html_templates_dir/"").read_text()
     write_html(html_handle, <<END_OF_HTML) # NOK
       </map>
 
@@ -2043,6 +2054,7 @@ END_OF_HTML
 def write_overview_line(html_handle, base_name: str, line: int, link_no: int):
     """ """
     global options
+    global html_templates_dir
 
     x1 = 0
     y1 = line - 1
@@ -2051,6 +2063,7 @@ def write_overview_line(html_handle, base_name: str, line: int, link_no: int):
     basename = base_name
     link = str(link_no)
 
+    html = (html_templates_dir/"").read_text()
     write_html(html_handle, <<END_OF_HTML) # NOK
         <area shape="rect" coords="{x1},{y1},{x2},{y2}" href="{basename}.gcov.{options.html_ext}#{link}" target="source" alt="overview">
 END_OF_HTML
@@ -2104,7 +2117,7 @@ def write_header(html_handle, header_type: int,
         esc_dir_name  = escape_html($dir_name)
 
         $base_dir = get_relative_base_path($dir_name);
-        if $frames:
+        if args.frames:
             # Need to break frameset when clicking any of these
             # links
             $view = ("<a href=\"$base_dir" + f"index.{options.html_ext}\" ".
@@ -2140,7 +2153,7 @@ def write_header(html_handle, header_type: int,
 
     # Append link to test description page if available
     if test_description and header_type != HDR_TESTDESC:
-        if $frames and (header_type == HDR_SOURCE or header_type == HDR_FUNC):
+        if args.frames and (header_type == HDR_SOURCE or header_type == HDR_FUNC):
             # Need to break frameset when clicking this link
             test += (" ( <span style=\"font-size:80%;\">".
                       "<a href=\"$base_dir".
@@ -2460,6 +2473,7 @@ def get_bran_code(view_type: int, text: str, sort_button: bool, base_dir: Path):
 
 def write_file_table_prolog(html_handle, file_heading: str, columns: List[Tuple[str, int]]):
     """Write heading for file table."""
+    global html_templates_dir
 
     if   len(columns) == 1: width = 20
     elif len(columns) == 2: width = 10
@@ -2473,6 +2487,7 @@ def write_file_table_prolog(html_handle, file_heading: str, columns: List[Tuple[
     file_width = 100 - num_columns * width
 
     # Table definition
+    html = (html_templates_dir/"").read_text()
     write_html(html_handle, <<END_OF_HTML) # NOK
       <center>
       <table width="80%" cellpadding=1 cellspacing=1 border=0>
@@ -2484,11 +2499,13 @@ END_OF_HTML
     # Empty first row
     for _, cols in columns:
         for _ in range(cols):
+            html = (html_templates_dir/"").read_text()
             write_html(html_handle, <<END_OF_HTML) # NOK
           <td width="{width}%"></td>
 END_OF_HTML
 
     # Next row
+    html = (html_templates_dir/"").read_text()
     write_html(html_handle, <<END_OF_HTML) # NOK
         </tr>
 
@@ -2500,10 +2517,12 @@ END_OF_HTML
     for heading, cols in columns:
         colspan = f" colspan={cols}" if cols > 1 else ""
 
+        html = (html_templates_dir/"").read_text()
         write_html(html_handle, <<END_OF_HTML) # NOK
           <td class="tableHead"{colspan}>{heading}</td>
 END_OF_HTML
 
+    html = (html_templates_dir/"").read_text()
     write_html(html_handle, <<END_OF_HTML) # NOK
         </tr>
 END_OF_HTML
@@ -2511,9 +2530,9 @@ END_OF_HTML
 
 def write_file_table_epilog(html_handle):
     """Write end of file table HTML code."""
-    # !!! read from html/file_table_epilog.html
-    write_html(html_handle, <<END_OF_HTML) # NOK
-END_OF_HTML
+    global html_templates_dir
+    html = (html_templates_dir/"file_table_epilog.html").read_text()
+    write_html(html_handle, html)
 
 # NOK
 def write_file_table_entry(html_handle, base_dir: Path, filename: str,
@@ -2521,6 +2540,7 @@ def write_file_table_entry(html_handle, base_dir: Path, filename: str,
                            entries: List[Tuple[???, int, int, int, bool]]):
     """Write an entry of the file table."""
     global options
+    global html_templates_dir
 
     esc_filename = escape_html(filename)
     # Add link to source if provided
@@ -2530,6 +2550,7 @@ def write_file_table_entry(html_handle, base_dir: Path, filename: str,
         file_code = esc_filename
 
     # First column: filename
+    html = (html_templates_dir/"").read_text()
     write_html(html_handle, <<END_OF_HTML) # NOK
         <tr>
           <td class="coverFile">{file_code}</td>
@@ -2542,6 +2563,7 @@ END_OF_HTML
         if graph:
             bar_graph = get_bar_graph_code(base_dir, found, hit)
 
+            html = (html_templates_dir/"").read_text()
             write_html(html_handle, <<END_OF_HTML) # NOK
           <td class="coverBar" align="center">
             {bar_graph}
@@ -2560,12 +2582,14 @@ END_OF_HTML
             # Show negative number of items without coverage
             hit = -(found - hit)
 
+        html = (html_templates_dir/"").read_text()
         write_html(html_handle, <<END_OF_HTML) # NOK
           <td class="coverPer{klass}">{rate}</td>
           <td class="coverNum{klass}">{hit} / {found}</td>
 END_OF_HTML
 
     # End of row
+    html = (html_templates_dir/"").read_text()
     write_html(html_handle, <<END_OF_HTML) # NOK
         </tr>
 END_OF_HTML
@@ -2574,6 +2598,7 @@ END_OF_HTML
 def write_file_table_detail_entry(html_handle, test_name: str,
                                   entries: List[Tuple[int, int]]):
     """Write entry for detail section in file table."""
+    global html_templates_dir
 
     if test_name == "":
         test_name = '<span style="font-style:italic">&lt;unnamed&gt;</span>'
@@ -2583,6 +2608,7 @@ def write_file_table_detail_entry(html_handle, test_name: str,
             test_name = match.group(1) + " (converted)"
 
     # Testname
+    html = (html_templates_dir/"").read_text()
     write_html(html_handle, <<END_OF_HTML) # NOK
         <tr>
           <td class="testName" colspan=2>{test_name}</td>
@@ -2590,11 +2616,13 @@ END_OF_HTML
     # Test data
     for found, hit in entries:
         rate_val = rate(hit, found, "&nbsp;%")
-        write_html(html_handle, <<END_OF_HTML);
+        html = (html_templates_dir/"").read_text()
+        write_html(html_handle, <<END_OF_HTML) # NOK
           <td class="testPer">{rate_val}</td>
           <td class="testNum">{hit}&nbsp;/&nbsp;{found}</td>
 END_OF_HTML
 
+    html = (html_templates_dir/"").read_text()
     write_html(html_handle, <<END_OF_HTML) # NOK
         </tr>
 
@@ -2805,6 +2833,7 @@ def write_source(html_handle,
 def write_source_prolog(html_handle):
     """Write start of source code table."""
     global options
+    global html_templates_dir
 
     lineno_heading = "         "
     branch_heading = ((fmt_centered(options.br_field_width, "Branch data") + " ")
@@ -2812,16 +2841,15 @@ def write_source_prolog(html_handle):
     line_heading   = fmt_centered(options.line_field_width, "Line data") + " "
     source_heading = " Source code"
 
-    # !!! read from html/source_prolog.html
-    write_html(html_handle, <<END_OF_HTML) # NOK
-END_OF_HTML
+    html = (html_templates_dir/"source_prolog.html").read_text()
+    write_html(html_handle, html)
 
 
 def write_source_epilog(html_handle):
     """Write end of source code table."""
-    # !!! read from html/source_epilog.html
-    write_html(html_handle, <<END_OF_HTML) # NOK
-END_OF_HTML
+    global html_templates_dir
+    html = (html_templates_dir/"source_epilog.html").read_text()
+    write_html(html_handle, html)
 
 # NOK
 def write_source_line(html_handle, line_num: int, $source, hit_count: Optional[float],
@@ -3241,11 +3269,12 @@ def apply_prefix(filename, prefixes: List[str]):
 
 
 def get_html_prolog(filename: Optional[Path] = None):
-    """If FILENAME is defined, return contents of file.
+    """If filename is defined, return contents of file.
     Otherwise return default HTML prolog.
     Die on error."""
+    global html_templates_dir
     if filename is None:
-        filename = Path("html/html_prolog.html")
+        filename = html_templates_dir/"html_prolog.html"
     try:
         return filename.read_text()
     exept:
@@ -3253,11 +3282,12 @@ def get_html_prolog(filename: Optional[Path] = None):
 
 
 def get_html_epilog(filename: Optional[Path] = None):
-    """If FILENAME is defined, return contents of file.
+    """If filename is defined, return contents of file.
     Otherwise return default HTML epilog.
     Die on error."""
+    global html_templates_dir
     if filename is None:
-        filename = Path("html/html_epilog.html")
+        filename = html_templates_dir/"html_epilog.html"
     try:
         return filename.read_text()
     exept:

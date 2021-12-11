@@ -1,19 +1,27 @@
 lcov
 ====
 
-Compile all py files in a wheel to pyc files.
+Graphical front-end for GCC's coverage testing tool gcov.
 
 Overview
 ========
 
-|package_bold| is a strict fork of Grant Patten's pycwheel_ package
-with a fixes allowing to work with Python3 or higher and with a code
-reformatting and some improvements.
+|package_bold| is a strict Python implementation of the `LCOV`_ package.
 
-|package_bold| is a graphical front-end for GCC's coverage testing tool gcov.
-It collects gcov data for multiple source files and creates HTML pages
-containing the source code annotated with coverage information. It also adds
-overview pages for easy navigation within the file structure.
+LCOV is an extension of GCOV, a GNU tool which provides information about
+what parts of a program are actually executed (i.e. "covered") while running
+a particular test case. The extension consists of a set of scripts which build
+on the textual GCOV output to implement the following enhanced functionality:
+
+  * HTML based output: coverage rates are additionally indicated using bar
+    graphs and specific colors.
+
+  * Support for large projects: overview pages allow quick browsing of
+    coverage data by providing three levels of detail: directory view,
+    file view and source code view.
+
+LCOV was initially designed to support Linux kernel coverage measurements,
+but works as well for coverage measurements on standard user space applications.
 
 `PyPI record`_.
 
@@ -22,34 +30,14 @@ overview pages for easy navigation within the file structure.
 Usage
 -----
 
-Processing the wheel in place:
-
-.. code-block:: bash
-
-    $ python -m pyc_wheel your_wheel-1.0.0-py3-none-any.whl
-    # Output: your_wheel-1.0.0-py3-none-any.whl
-
-or with backup:
-
-.. code-block:: bash
-
-    $ python -m pyc_wheel --with_backup your_wheel-1.0.0-py3-none-any.whl
-    # Output: your_wheel-1.0.0-py3-none-any.whl
-    #         your_wheel-1.0.0-py3-none-any.whl.bak
-
-or with quiet:
-
-.. code-block:: bash
-
-    $ python -m pyc_wheel --quiet your_wheel-1.0.0-py3-none-any.whl
-    # Output: your_wheel-1.0.0-py3-none-any.whl
+TBD...
 
 Installation
 ============
 
 Prerequisites:
 
-+ Python 3.6 or higher
++ Python 3.7 or higher
 
   * https://www.python.org/
   * 3.7 is a primary test environment.
@@ -115,3 +103,4 @@ Authors
 .. _development page: https://github.com/karpierz/lcov
 .. _PyPI record: https://pypi.org/project/lcov/
 .. _Documentation: https://lcov.readthedocs.io/
+.. _LCOV: https://github.com/linux-test-project/lcov

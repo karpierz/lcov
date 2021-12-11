@@ -38,13 +38,12 @@ geninfo
 #use strict;
 #use warnings;
 #use File::Basename;
-#use File::Spec::Functions qw /abs2rel catdir file_name_is_absolute splitdir
+#use File::Spec::Functions qw /catdir file_name_is_absolute splitdir
 #                  splitpath catpath/;
 #use File::Temp qw(tempdir);
 #use File::Copy qw(copy);
 #use Getopt::Long;
 #use Digest::MD5 qw(md5_base64);
-#use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
 if $^O == "msys":
     require File::Spec::Win32;
 
@@ -53,6 +52,7 @@ import argparse
 import sys
 import re
 from pathlib import Path
+import gzip
 
 from .util import unique
 from .util import sort_unique
@@ -167,7 +167,7 @@ our @data_directory;
 our $test_name = "";
 args.quiet: bool = False  # If set, suppress information messages
 args.help:  bool = False  # Help option flag
-our $output_filename;
+args.output_filename: Optional[str] = None
 $base_directory: Optional = None
 args.version: bool = False  # Version option flag
 args.follow:  bool = False
@@ -289,7 +289,7 @@ if $config or %opt_rc:
 # Parse command line options
 if (!GetOptions(
         "test-name|t=s"       => \$test_name,
-        "output-filename|o=s" => \$output_filename,
+        "output-filename|o=s" => \args.output_filename,
         "checksum"            => \$checksum,
         "no-checksum"         => \options.no_checksum,
         "base-directory|b=s"  => \args.base_directory,
@@ -433,19 +433,19 @@ else:
     graph_file_extension = ".bb"
 
 # Check output filename
-if defined($output_filename) and $output_filename != "-":
+if args.output_filename and args.output_filename != "-":
     # Initially create output filename, data is appended
     # for each data file processed
     try:
-        with Path($output_filename).open("wb"):
+        with Path(args.output_filename).open("wb"):
             pass
     except:
         die("ERROR: cannot create {output_filename}!")
 
-    # Make $output_filename an absolute path because we're going
+    # Make args.output_filename an absolute path because we're going
     # to change directories while processing files
-    if not ($output_filename =~ /^\/(.*)$/):
-        $output_filename = $cwd."/".$output_filename;
+    if not (args.output_filename =~ /^\/(.*)$/):
+        args.output_filename = $cwd."/".args.output_filename
 
 # Build list of directories to identify external files
 for entry in (@data_directory + [args.base_directory]):
@@ -684,10 +684,9 @@ def process_dafile(da_filename: Path, $dir):
     my @tmp_links;        # Temporary links to be cleaned up
     my @result;
     my $index;
-    local *INFO_HANDLE;
 
     try:
-        info("Processing %s", abs2rel(str(da_filename), $dir))
+        info("Processing %s", str(da_filename.relative_to($dir)))
 
         # Get path to data file in absolute and normalized form (begins with /,
         # contains no more ../ or ./)
@@ -800,13 +799,15 @@ def process_dafile(da_filename: Path, $dir):
             warn(f"WARNING: gcov did not create any files for {da_filename}!")
 
         # Check whether we're writing to a single file
-        if $output_filename:
-            if $output_filename == "-":
-                *INFO_HANDLE = sys.stdout
+        if args.output_filename:
+            if args.output_filename == "-":
+                INFO_HANDLE = sys.stdout
             else:
                 # Append to output file
-                INFO_HANDLE = open(">>", $output_filename)
-                    or die("ERROR: cannot write to $output_filename!")
+                try:
+                    INFO_HANDLE = Path(args.output_filename).open(">>")
+                except:
+                    die(f"ERROR: cannot write to {args.output_filename}!")
         else:
             # Open .info file for output
             try:
@@ -815,7 +816,7 @@ def process_dafile(da_filename: Path, $dir):
                 die(f"ERROR: cannot create {da_filename}.info!")
 
         # Write test name
-        printf(INFO_HANDLE "TN:%s\n", $test_name);
+        print("TN:%s" % $test_name, file=INFO_HANDLE)
 
         # Traverse the list of generated .gcov files and combine them into a
         # single .info file
@@ -912,7 +913,7 @@ def process_dafile(da_filename: Path, $dir):
                     continue
 
             # Write absolute path of source file
-            printf(INFO_HANDLE "SF:%s\n", $source_filename)
+            print("SF:%s" % $source_filename, file=INFO_HANDLE)
 
             # If requested, derive function coverage data from
             # line coverage data of the first line of a function
@@ -952,7 +953,7 @@ def process_dafile(da_filename: Path, $dir):
                     # Normalize function name
                     $fn = filter_fn_name($fn)
 
-                    print(INFO_HANDLE "FN:$line,$fn\n");
+                    print("FN:$line,$fn", file=INFO_HANDLE)
                 }
             }
 
@@ -1026,7 +1027,7 @@ def process_dafile(da_filename: Path, $dir):
             Path($gcov_file).unlink()
         }
 
-        if not ($output_filename and $output_filename == "-"):
+        if not (args.output_filename and args.output_filename == "-"):
             close(INFO_HANDLE)
     finally:
         # Change back to initial directory
@@ -1454,8 +1455,8 @@ def read_gcov_file(gcov_filename: Path) -> Tuple[Optional[???], Optional[???], O
 
 
 def read_intermediate_text(gcov_filename: Path, data: Dict[str, str]):
-    """Read gcov intermediate text format in GCOV_FILENAME and add
-    the resulting data to DATA in the following format:
+    """Read gcov intermediate text format in gcov_filename and add
+    the resulting data to 'data' in the following format:
 
     data:      source_filename -> file_data
     file_data: concatenated lines of intermediate text data
@@ -1476,10 +1477,10 @@ def read_intermediate_text(gcov_filename: Path, data: Dict[str, str]):
                 else:
                     data[filename] += line
 
-# NOK
+
 def read_intermediate_json(gcov_filename: Path, data: Dict[str, object]) -> str:
-    """Read gcov intermediate JSON format in GCOV_FILENAME and add the resulting
-    data to DATA in the following format:
+    """Read gcov intermediate JSON format in gcov_filename and add the resulting
+    data to 'data' in the following format:
 
     data:      source_filename -> file_data
     file_data: GCOV JSON data for file
@@ -1487,18 +1488,18 @@ def read_intermediate_json(gcov_filename: Path, data: Dict[str, object]) -> str:
     Also return the value for current_working_directory.
     """
     try:
-        my text;                          # NOK
-        gunzip(str(gcov_filename), \text) # NOK
+        with gzip.open(str(gcov_filename), "rt") as fhandle:
+            text = fhandle.read()
     except Exception as exc:
         die(f"ERROR: Could not read {gcov_filename}: {exc}")
 
     json = json.loads(text)
-    if json is None or not exists(json["files"]) or ref(json["files"] != "ARRAY"):
+    if json is None or "files" not in json or ref(json["files"] != "ARRAY"): # NOK
         die(f"ERROR: Unrecognized JSON output format in {gcov_filename}")
 
     json_basedir = json["current_working_directory"]
     # Workaround for bug in MSYS GCC 9.x that encodes \ as \n in gcov JSON output
-    if $^O == "msys" and re.???(r"\n", json_basedir):
+    if $^O == "msys" and re.???(r"\n", json_basedir): # NOK
         json_basedir = re.sub(r"\n", r"/", json_basedir)
 
     for file in json["files"]:
@@ -1732,7 +1733,7 @@ def intermediate_json_to_info(fhandle, $data, $srcdata):
         print("end_of_record",    file=fhandle)
 
 # NOK
-def get_output_fd(outfile: Optional[???], $file):
+def get_output_fd(outfile: Optional[str], $file):
     """ """
     if outfile is None:
         try:
@@ -1790,7 +1791,7 @@ def process_intermediate($file: Path, $dir, $tempdir):
     json_basedir = None
 
     try:
-        info("Processing %s", abs2rel(str(file), $dir));
+        info("Processing %s", str(file.relative_to($dir)))
 
         file = solve_relative_path(cwd, str(file))
         $fdir, $fbase, $fext = split_filename(file)
@@ -1871,10 +1872,10 @@ def process_intermediate($file: Path, $dir, $tempdir):
 
         # Get data on exclusion markers and checksums if requested
         if not args.no_markers or $checksum:
-            $srcdata: Dict[str, ???] = get_all_source_data(%data.keys())
+            $srcdata: Dict[str, Tuple[???, ???, ???]] = get_all_source_data(%data.keys())
 
         # Generate output
-        with get_output_fd($output_filename, $file) as fhandle:
+        with get_output_fd(args.output_filename, $file) as fhandle:
             if $json_format:
                 intermediate_json_to_info(fhandle, \%data, $srcdata);
             else:
@@ -2011,22 +2012,21 @@ def system_no_output(mode: int, *args) -> Tuple[int, Optional[???], Optional[???
 
     return (result, stdout_file, stderr_file)
 
-# NOK
-def get_all_source_data(filenames: List[???]) -> Dict[str, ???]:
+
+def get_all_source_data(filenames: List[str]) -> Dict[str, Tuple[???, ???, ???]]: # NOK
     """Scan specified source code files for exclusion markers and return
       filename -> [ excl, brexcl, checksums ]
       excl:      lineno -> 1 for all lines for which to exclude all data
       brexcl:    lineno -> 1 for all lines for which to exclude branch data
       checksums: lineno -> source code checksum
     """
-    data: Dict[str, ???] = {}
+    data: Dict[str, Tuple[???, ???, ???]] = {} # NOK
     failed = False
     for filename in filenames:
-        if exists(data[filename])): continue
-
-        @d = get_source_data(Path(filename))
-        if (@d):
-            data[filename] = [ @d ]
+        if filename in data: continue
+        srcdata = get_source_data(Path(filename))
+        if srcdata:
+            data[filename] = srcdata
         else:
             failed = True
 
@@ -2036,7 +2036,7 @@ def get_all_source_data(filenames: List[???]) -> Dict[str, ???]:
     return data
 
 # NOK
-def get_source_data(filename: Path) -> Tuple[???, ???, ???]:
+def get_source_data(filename: Path) -> Optional[Tuple[???, ???, ???]]:
     """Scan specified source code file for exclusion markers and checksums.
     Return
       ( excl, brexcl, checksums ) where
@@ -2059,7 +2059,7 @@ def get_source_data(filename: Path) -> Tuple[???, ???, ???]:
         fhandle = filename.open("rt")
     except:
         warn(f"WARNING: could not open {filename}")
-        return
+        return None
     with fhandle:
         while (<fhandle>):
             if /$EXCL_STOP/:
@@ -2101,7 +2101,7 @@ def process_graphfile(graph_filename: Path, $dir):
     global args
     global cwd
 
-    info("Processing %s", abs2rel(str(graph_filename), $dir))
+    info("Processing %s", str(graph_filename.relative_to($dir)))
 
     # Get path to data file in absolute and normalized form (begins with /,
     # contains no more ../ or ./)
@@ -2143,15 +2143,15 @@ def process_graphfile(graph_filename: Path, $dir):
         instr, graph = apply_exclusion_data($instr, $graph)
 
     # Check whether we're writing to a single file
-    if $output_filename:
-        if $output_filename == "-":
+    if args.output_filename:
+        if args.output_filename == "-":
             INFO_HANDLE = sys.stdout
         else:
             # Append to output file
             try:
-                INFO_HANDLE = Path($output_filename).open(">>")
+                INFO_HANDLE = Path(args.output_filename).open(">>")
             except:
-                die(f"ERROR: cannot write to $output_filename!")
+                die(f"ERROR: cannot write to {args.output_filename}!")
     else:
         # Open .info file for output
         try:
@@ -2200,8 +2200,8 @@ def process_graphfile(graph_filename: Path, $dir):
 
         print("end_of_record", file=INFO_HANDLE)
 
-    if not ($output_filename and $output_filename == "-"):
-        close(INFO_HANDLE);
+    if not (args.output_filename and args.output_filename == "-"):
+        close(INFO_HANDLE)
 
 # NOK
 def apply_exclusion_data($instr, $graph):
@@ -2217,7 +2217,7 @@ def apply_exclusion_data($instr, $graph):
     # instr     : filename -> line data
     # line data : [ line1, line2, ... ]
 
-    $excl_data: Dict[str, ???] = get_all_source_data($graph.keys() + $instr.keys())
+    $excl_data: Dict[str, Tuple[???, ???, ???]] = get_all_source_data($graph.keys() + $instr.keys())
 
     # Skip if no markers were found
     if not $excl_data:
@@ -2310,7 +2310,6 @@ def find_base_from_source(base_dir: Path, source_files: List[???]) -> Path: # NO
     - the base directory is either BASE_DIR or one of its parent directories
     - files by the same name are not present in multiple parent directories
     """
-
     rel_files = set()
     # Determine list of relative paths
     for filename in source_files:

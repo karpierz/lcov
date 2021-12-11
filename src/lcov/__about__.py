@@ -3,4 +3,4 @@
 # https://opensource.org/licenses/BSD-3-Clause
 
 __import__("pkg_about").about()
-__copyright__ = f"Copyright (c) 2020-2022 {__author__}"
+__copyright__ = f"Copyright (c) 2020-2022 {__author__}"  # noqa

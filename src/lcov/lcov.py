@@ -52,7 +52,7 @@ lcov
 #use File::Path;
 #use File::Find;
 #use File::Temp qw /tempdir/;
-#use File::Spec::Functions qw /abs2rel catdir catpath
+#use File::Spec::Functions qw / catdir catpath
 #                  file_name_is_absolute rootdir splitdir splitpath/;
 #use Getopt::Long;
 #use Cwd qw //;
@@ -64,6 +64,7 @@ import re
 import shutil
 from pathlib import Path
 
+from .types import DB, LineData, BlockData, ChecksumData, InfoData, InfoEntry, BranchCountData
 from .util import reverse_dict
 from .util import read_file, write_file
 from .util import apply_config
@@ -142,8 +143,8 @@ options.list_width:        int = 80
 options.list_truncate_max: int = 20
 args.external:          Optional[bool] = None
 args.no_external:       Optional[bool] = None
-our opt.config_file;
-our opt.rc:           Optional[Dict];
+args.config_file:       Optional[Path] = None
+args.rc:                Dict[str, str] = {}
 args.summary:           Optional[List] = None
 args.compat:            Optional[str] = None
 options.br_coverage:    bool = False
@@ -157,8 +158,6 @@ br_overall_found: Optional[int] = None
 br_overall_hit:   Optional[int] = None
 
 cwd = Path.cwd()  # Current working directory
-our $cwd = `pwd`; # Current working directory
-chomp($cwd);
 
 #
 # Code entry point
@@ -166,7 +165,7 @@ chomp($cwd);
 
 # Check command line for a configuration file name
 Getopt::Long::Configure("pass_through", "no_auto_abbrev")
-GetOptions("config-file=s": \args.config_file,
+GetOptions("config-file=s": \Path(args.config_file),
            "rc=s%":         \args.rc);
 Getopt::Long::Configure("default");
 
@@ -230,7 +229,7 @@ if (!GetOptions(
         "no-external"          => \args.no_external,
         "summary=s"            => \args.summary,
         "compat=s"             => \args.compat,
-        "config-file=s"        => \args.config_file,
+        "config-file=s"        => \Path(args.config_file),
         "rc=s%"                => \args.rc,
         "fail-under-lines=s"   => \options.fail_under_lines,
         )):
@@ -266,14 +265,17 @@ if options.list_width <= 40:
         "larger than 40)")
 
 # Normalize --path text
-args.diff_path = re.sub("\/$", "", args.diff_path) # ???
+args.diff_path = re.sub(r"/$", "", args.diff_path)
 
 # Check for valid options
 check_options()
 
 # Only --extract, --remove and --diff allow unnamed parameters
-if @ARGV and !(args.extract is not None or args.remove is not None or args.diff or args.summary):
-    die("Extra parameter found: '".join(" ", @ARGV)."'\n"
+if args.ARGV and not (args.extract is not None or
+                      args.remove  is not None or
+                      args.diff    is not None or
+                      args.summary):
+    die("Extra parameter found: '{}'\n".format(" ".join(args.ARGV)) +
         f"Use {tool_name} --help to get usage information")
 
 # If set, indicates that data is written to stdout
@@ -326,8 +328,8 @@ elif args.extract is not None:
 elif args.list:
     data_to_stdout = False
     listing()
-elif args.diff:
-    if len(@ARGV) != 1:
+elif args.diff is not None:
+    if len(args.ARGV) != 1:
         die("ERROR: option --diff requires one additional argument!\n"
             f"Use {tool_name} --help to get usage information")
     (ln_overall_found, ln_overall_hit,
@@ -504,41 +506,38 @@ def kernel_reset():
     except:
         die(f"ERROR: cannot write to {reset_file}!")
 
-# NOK
-def lcov_find(dir: Path, func: Callable, $data, pattern: Optional[List] = None):
-    # lcov_find(dir, function, data[, extension, ...)])
 
-    # Search DIR for files and directories whose name matches PATTERN and run
-    # FUNCTION for each match. If not pattern is specified, match all names.
-    #
-    # FUNCTION has the following prototype:
-    #   function(dir: Path, relative_name, data)
-    #
-    # Where:
-    #   dir: the base directory for this search
-    #   relative_name: the name relative to the base directory of this entry
-    #   data: the DATA variable passed to lcov_find
-
+def lcov_find(dir: Path, func: Callable, data: object, patterns: Optional[List] = None):
+    """Search dir for files and directories whose name matches patterns and
+    run func for each match. If not patterns is specified, match all names.
+    
+    func has the following prototype:
+      func(dir: Path, relative_name, data)
+    
+    Where:
+      dir: the base directory for this search
+      relative_name: the name relative to the base directory of this entry
+      data: the data variable passed to lcov_find
+    """
     result = None
 
     def find_cb():
-        nolocal dir, func, $data, pattern
+        nolocal dir, func, data, patterns
         nolocal result
 
-        filename = $File::Find::name;
+        if result is not None: return
 
-        if result is not None:
-            return
+        filename = $File::Find::name; # NOK
+        filename = Path(filename).relative_to(dir)
 
-        filename = abs2rel(filename, str(dir))
-        for $patt in pattern:
-            if filename =~ /$patt/:
-                result = func(dir, filename, $data)
+        for patt in patterns:
+            if re.???(patt, filename.as_posix()): # NOK
+                result = func(dir, filename, data)
                 return
 
-    if len(pattern) == 0: pattern = [".*"]
+    if not patterns: patterns = [".*"]
 
-    find({ wanted => find_cb, no_chdir => 1 }, str(dir))
+    find({ wanted => find_cb, no_chdir => 1 }, str(dir)) # NOK
 
     return result
 
@@ -551,27 +550,27 @@ def lcov_copy(path_from: Path, path_to: Path, subdirs: List[object]):
     patterns = [rf"^{subd}" for subd in subdirs]
     lcov_find(path_from, lcov_copy_fn, path_to, patterns)
 
-# NOK
-def lcov_copy_fn(path_from: Path, $rel, path_to: Path):
+
+def lcov_copy_fn(path_from: Path, rel: Path, path_to: Path):
     """Copy directories, files and links from/rel to to/rel."""
     abs_from = Path(os.path.normpath(path_from/rel))
     abs_to   = Path(os.path.normpath(path_to/rel))
 
-    if (-d):
-        if (not -d $abs_to):
+    if (-d): # NOK
+        if (not -d $abs_to): # NOK
             try:
-                mkpath($abs_to)
+                mkpath($abs_to) # NOK
             except:
                 die(f"ERROR: cannot create directory {abs_to}")
             abs_to.chmod(0o0700)
-    elif (-l):
+    elif (-l): # NOK
         # Copy symbolic link
         try:
             link = os.readlink(abs_from)
         except Exception as exc:
             die(f"ERROR: cannot read link {abs_from}: {exc}!")
         try:
-            symlink($link, $abs_to)
+            symlink($link, $abs_to) # NOK
         except Exception as exc:
             die(f"ERROR: cannot create link {abs_to}: {exc}!")
     else:
@@ -648,7 +647,7 @@ def lcov_geninfo(*dirs):
         for key, val in args.rc.items():
             param += ["--rc", f"{key}={val}"]
     if args.config_file is not None:
-        param += ["--config-file", args.config_file]
+        param += ["--config-file", str(args.config_file)]
     for patt in args.include_patterns:
         param += ["--include", patt]
     for patt in args.exclude_patterns:
@@ -805,11 +804,11 @@ def get_base(dir: Path) -> Tuple[Optional[Path], Optional[Path]]:
         return (None, None)
 
     # sys base is parent of parent of markerfile.
-    sys_base = Path(abs2rel(str(marker_file.parent.parent.parent), str(dir))) # NOK
+    sys_base = marker_file.parent.parent.parent.relative_to(dir)
 
     # build base is parent of parent of markerfile link target.
     try:
-        link = Path(os.readlink(str(marker_file)))
+        link = Path(os.readlink(marker_file))
     except Exception as exc:
         die(f"ERROR: could not read {markerfile}")
     build = link.parent.parent.parent
@@ -817,12 +816,12 @@ def get_base(dir: Path) -> Tuple[Optional[Path], Optional[Path]]:
     return (sys_base, build)
 
 
-def find_link_fn(path_from: Path, rel, filename):
+def find_link_fn(path_from: Path, rel: Path, filename) -> Optional[Path]:
     abs_file = path_from/rel/filename
     return abs_file if abs_file.is_symlink() else None
 
 # NOK
-def apply_base_dir($data: Path, $base: Optional[Path], $build, dirs: List[???]) -> List:
+def apply_base_dir($data: Path, $base: Optional[Path], $build: Optional[???], dirs: List[???]) -> List[???]:
     # apply_base_dir(data_dir, base_dir, build_dir, @directories)
     # Make entries in @directories relative to data_dir.
     global args
@@ -830,7 +829,7 @@ def apply_base_dir($data: Path, $base: Optional[Path], $build, dirs: List[???]) 
     $data = str($data)
     if $base is not None: $base = str($base)
 
-    result: List = []
+    result: List[???] = []
 
     for $dir in dirs:
 
@@ -848,17 +847,18 @@ def apply_base_dir($data: Path, $base: Optional[Path], $build, dirs: List[???]) 
         # Relative to the specified base-directory?
         if args.base_directory is not None:
             if file_name_is_absolute(str(args.base_directory)):
-                $base = abs2rel(str(args.base_directory), rootdir())
+                $base = args.base_directory.relative_to(rootdir())
             else:
-                $base = str(args.base_directory)
+                $base = args.base_directory
+            $base = str($base)
             if (-d catdir($data, $base, $dir)):
                 result.append(catdir($base, $dir))
                 continue
 
         # Relative to the build directory?
-        if defined($build):
+        if $build is not None:
             if file_name_is_absolute($build):
-                $base = abs2rel($build, rootdir())
+                $base = str(Path($build).relative_to(rootdir()))
             else:
                 $base = $build
             if (-d catdir($data, $base, $dir)):
@@ -917,7 +917,7 @@ def kernel_capture_initial():
 
 def adjust_kernel_dir(dir: Path, build: Optional[Path]) -> Path:
     """Adjust directories specified with -k so that they point to the
-    directory relative to DIR.
+    directory relative to dir.
     Return the build directory if specified or the auto-detected
     build-directory.
     """
@@ -976,7 +976,7 @@ def link_data(targetdatadir: Path, targetgraphdir: Path, *, create: bool):
     lcov_find(targetdatadir, op_data_cb, targetgraphdir, [r"\.gcda$", r"\.da$"])
 
 
-def link_data_cb(datadir: Path, $rel, graphdir: Path): # NOK
+def link_data_cb(datadir: Path, rel: Path, graphdir: Path):
     """Create symbolic link in graphdir/rel pointing to datadir/rel."""
     abs_from = datadir/rel
     abs_to   = graphdir/rel
@@ -1002,9 +1002,8 @@ def link_data_cb(datadir: Path, $rel, graphdir: Path): # NOK
         or die(f"ERROR: could not create symlink at {abs_to}: {exc}")
 
 
-def unlink_data_cb(datadir: Path, $rel, graphdir: Path):
+def unlink_data_cb(datadir: Path, rel: Path, graphdir: Path):
     """Remove symbolic link from graphdir/rel to datadir/rel."""
-
     abs_from = datadir/rel
     abs_to   = graphdir/rel
 
@@ -1066,7 +1065,7 @@ def find_graph(dir: Path) -> bool:
     return count[0] > 0
 
 
-def find_graph_cb(dir: Path, $rel, count: List[int]): # NOK
+def find_graph_cb(dir: Path, rel: Path, count: List[int]):
     """Count number of files found."""
     count[0] += 1
 
@@ -1091,13 +1090,13 @@ def create_temp_dir() -> Path:
     return dir
 
 
-def compress_brcount(brcount: Dict[int, str]) -> Tuple[Dict[int, str], int, int]:
+def compress_brcount(brcount: BranchCountData) -> Tuple[BranchCountData, int, int]:
     """ """
     db = brcount_to_db(brcount)
     return db_to_brcount(db, brcount)
 
 # NOK
-def read_info_file($tracefile) -> Dict[str, Dict[str, object]]:
+def read_info_file($tracefile) -> InfoData:
     # read_info_file(info_filename)
     #
     # Read in the contents of the .info file specified by INFO_FILENAME. Data will
@@ -1163,7 +1162,7 @@ def read_info_file($tracefile) -> Dict[str, Dict[str, object]]:
     negative         = False  # If set, warn about negative counts
     changed_testname = False  # If set, warn about changed testname
 
-    result: Dict[str, Dict[str, object]] = {}  # Resulting hash: file -> data
+    result: InfoData = {}  # Resulting hash: file -> data
 
     info("Reading tracefile $tracefile")
 
@@ -1363,8 +1362,9 @@ def read_info_file($tracefile) -> Dict[str, Dict[str, object]]:
     return result
 
 
-def get_info_entry(entry: Dict[str, object]) -> Tuple:
-    """Retrieve data from an entry of the structure generated by read_info_file().
+def get_info_entry(info_entry: InfoEntry) -> Tuple:
+    """Retrieve data from an info_entry of the structure generated by
+    read_info_file().
     Return a tuple of references to dicts:
     (test data  dict, sum count   dict, funcdata   dict, checkdata  dict,
     testfncdata dict, sumfnccount dict, testbrdata dict, sumbrcount dict,
@@ -1372,20 +1372,20 @@ def get_info_entry(entry: Dict[str, object]) -> Tuple:
     functions found, functions hit,
     branches  found, branches  hit)
     """
-    testdata    = entry.get("test")
-    sumcount    = entry.get("sum")
-    funcdata    = entry.get("func")
-    checkdata   = entry.get("check")
-    testfncdata = entry.get("testfnc")
-    sumfnccount = entry.get("sumfnc")
-    testbrdata  = entry.get("testbr")
-    sumbrcount  = entry.get("sumbr")
-    ln_found: int = entry.get("found")
-    ln_hit:   int = entry.get("hit")
-    fn_found: int = entry.get("f_found")
-    fn_hit:   int = entry.get("f_hit")
-    br_found: int = entry.get("b_found")
-    br_hit:   int = entry.get("b_hit")
+    testdata    = info_entry.get("test")
+    sumcount    = info_entry.get("sum")
+    funcdata    = info_entry.get("func")
+    checkdata   = info_entry.get("check")
+    testfncdata = info_entry.get("testfnc")
+    sumfnccount = info_entry.get("sumfnc")
+    testbrdata  = info_entry.get("testbr")
+    sumbrcount  = info_entry.get("sumbr")
+    ln_found: int = info_entry.get("found")
+    ln_hit:   int = info_entry.get("hit")
+    fn_found: int = info_entry.get("f_found")
+    fn_hit:   int = info_entry.get("f_hit")
+    br_found: int = info_entry.get("b_found")
+    br_hit:   int = info_entry.get("b_hit")
 
     return (testdata, sumcount, funcdata, checkdata,
             testfncdata, sumfnccount,
@@ -1395,7 +1395,7 @@ def get_info_entry(entry: Dict[str, object]) -> Tuple:
             br_found, br_hit)
 
 
-def set_info_entry(entry: Dict[str, object],
+def set_info_entry(info_entry: InfoEntry,
                    testdata, sumcount, funcdata, checkdata,
                    testfncdata, sumfcncount,
                    testbrdata,  sumbrcount,
@@ -1403,20 +1403,20 @@ def set_info_entry(entry: Dict[str, object],
                    fn_found=None fn_hit=None
                    br_found=None br_hit=None):
     """Update the dict referenced by ENTRY with the provided data references."""
-    entry["test"]    = testdata
-    entry["sum"]     = sumcount
-    entry["func"]    = funcdata
-    entry["check"]   = checkdata
-    entry["testfnc"] = testfncdata
-    entry["sumfnc"]  = sumfcncount
-    entry["testbr"]  = testbrdata
-    entry["sumbr"]   = sumbrcount
-    if ln_found is not None: entry["found"]   = ln_found
-    if ln_hit   is not None: entry["hit"]     = ln_hit
-    if fn_found is not None: entry["f_found"] = fn_found
-    if fn_hit   is not None: entry["f_hit"]   = fn_hit
-    if br_found is not None: entry["b_found"] = br_found
-    if br_hit   is not None: entry["b_hit"]   = br_hit
+    info_entry["test"]    = testdata
+    info_entry["sum"]     = sumcount
+    info_entry["func"]    = funcdata
+    info_entry["check"]   = checkdata
+    info_entry["testfnc"] = testfncdata
+    info_entry["sumfnc"]  = sumfcncount
+    info_entry["testbr"]  = testbrdata
+    info_entry["sumbr"]   = sumbrcount
+    if ln_found is not None: info_entry["found"]   = ln_found
+    if ln_hit   is not None: info_entry["hit"]     = ln_hit
+    if fn_found is not None: info_entry["f_found"] = fn_found
+    if fn_hit   is not None: info_entry["f_hit"]   = fn_hit
+    if br_found is not None: info_entry["b_found"] = br_found
+    if br_hit   is not None: info_entry["b_hit"]   = br_hit
 
 
 def add_counts(data1: Dict[int, int],
@@ -1462,9 +1462,9 @@ def add_counts(data1: Dict[int, int],
     return (result, found, hit)
 
 
-def merge_checksums(dict1: Dict[int, object],
-                    dict2: Dict[int, object],
-                    filename: str) -> Dict[int, object]:
+def merge_checksums(dict1: ChecksumData,
+                    dict2: ChecksumData,
+                    filename: str) -> ChecksumData:
     """dict1 and dict2 are dicts containing a mapping
 
       line number -> checksum
@@ -1472,7 +1472,7 @@ def merge_checksums(dict1: Dict[int, object],
     Merge checksum lists defined in dict1 and dict2 and return resulting hash.
     Die if a checksum for a line is defined in both hashes but does not match.
     """
-    result: Dict[int, object] = {}
+    result: ChecksumData = {}
 
     for line, val1 in dict1.items():
         if line in dict2 and val1 != dict2[line]:
@@ -1543,7 +1543,7 @@ def add_testfncdata(testfncdata1: Dict[str, Tuple[Dict[object, int], int, int]],
     return result
 
 
-def brcount_db_combine(db1: Dict, db2: Dict, op: int):
+def brcount_db_combine(db1: DB, db2: DB, op: int):
     """db1 := db1 op db2, where
       db1, db2: brcount data as returned by brcount_to_db
       op:       one of BR_ADD and BR_SUB
@@ -1567,7 +1567,7 @@ def brcount_db_combine(db1: Dict, db2: Dict, op: int):
                             db1[line][block][branch] = 0
 
 
-def brcount_db_get_found_and_hit(db: Dict[int, Dict[object, Dict[object, object]]]) -> Tuple[int, int]:
+def brcount_db_get_found_and_hit(db: DB) -> Tuple[int, int]:
     # Return (br_found, br_hit) for db.
     br_found, br_hit = 0, 0
     for line, ldata in db.items():
@@ -1579,9 +1579,9 @@ def brcount_db_get_found_and_hit(db: Dict[int, Dict[object, Dict[object, object]
     return (br_found, br_hit)
 
 
-def combine_brcount(brcount1: Dict[int, str],
-                    brcount2: Dict[int, str],
-                    op, *, inplace: bool = False) -> Tuple[Dict[int, str], int, int]:
+def combine_brcount(brcount1: BranchCountData,
+                    brcount2: BranchCountData,
+                    op, *, inplace: bool = False) -> Tuple[BranchCountData, int, int]:
     """If op is BR_ADD, add branch coverage data and return list brcount_added.
     If op is BR_SUB, subtract the taken values of brcount2 from brcount1 and
     return brcount_sub.
@@ -1593,13 +1593,13 @@ def combine_brcount(brcount1: Dict[int, str],
     return db_to_brcount(db1, brcount1 if inplace else None)
 
 
-def brcount_to_db(brcount: Dict[int, str]) -> Dict[int, Dict[???, Dict[???, str]]]: # NOK
+def brcount_to_db(brcount: BranchCountData) -> DB:
     """Convert brcount data to the following format:
      db:          line number    -> block dict
      block  dict: block number   -> branch dict
      branch dict: branch number  -> taken value
     """
-    db: Dict[int, Dict[???, Dict[???, str]]] = {} # NOK
+    db: DB = {}
     # Add branches to database
     for line, brdata in brcount.items():
         for entry in brdata.split(":"):
@@ -1617,8 +1617,8 @@ def brcount_to_db(brcount: Dict[int, str]) -> Dict[int, Dict[???, Dict[???, str]
     return db
 
 
-def db_to_brcount(db: Dict[int, Dict[???, Dict[???, str]]], # NOK
-                  brcount: Optional[Dict[int, str]] = None) -> Tuple[Dict[int, str], int, int]:
+def db_to_brcount(db: DB,
+                  brcount: Optional[BranchCountData] = None) -> Tuple[BranchCountData, int, int]:
     """Convert branch coverage data back to brcount format.
     If brcount is specified, the converted data is directly inserted in brcount.
     """
@@ -1627,10 +1627,10 @@ def db_to_brcount(db: Dict[int, Dict[???, Dict[???, str]]], # NOK
     br_hit   = 0
     # Convert database back to brcount format
     for line in sorted(db.keys()):
-        ldata: Dict[???, Dict[???, str]] = db[line] # NOK
+        ldata: LineData = db[line]
         brdata = ""
         for block in sorted({$a <=> $b} ldata.keys()): # NOK
-            bdata: Dict[???, str] = ldata[block] # NOK
+            bdata: BlockData = ldata[block]
             for branch in sorted({$a <=> $b} bdata.keys()): # NOK
                 taken = bdata[branch]
                 br_found += 1
@@ -1669,8 +1669,8 @@ def add_testbrdata(testbrdata1: Dict,
     return result
 
 
-def combine_info_files(info1: Dict[str, Dict[str, object]],
-                       info2: Dict[str, Dict[str, object]]) -> Dict[str, Dict[str, object]]:
+def combine_info_files(info1: InfoData,
+                       info2: InfoData) -> InfoData:
     """Combine .info data in infos referenced by INFO_REF1 and INFO_REF2.
     Return reference to resulting info."""
 
@@ -1690,9 +1690,9 @@ def combine_info_files(info1: Dict[str, Dict[str, object]],
     return info1
 
 
-def combine_info_entries(entry1: Dict[str, object],
-                         entry2: Dict[str, object],
-                         filename: str) -> Dict[str, object]:
+def combine_info_entries(entry1: InfoEntry,
+                         entry2: InfoEntry,
+                         filename: str) -> InfoEntry:
     """Combine .info data entry hashes referenced by ENTRY1 and ENTRY2.
     Return reference to resulting hash."""
 
@@ -1750,7 +1750,7 @@ def combine_info_entries(entry1: Dict[str, object],
     # Calculate resulting sumcount
 
     # Store result
-    result: Dict[str, object] = {}  # Hash containing combined entry
+    result: InfoEntry = {}  # Hash containing combined entry
     set_info_entry(result,
                    result_testdata, result_sumcount, result_funcdata, result_checkdata,
                    result_testfncdata, result_sumfnccount,
@@ -1769,10 +1769,11 @@ def add_traces() -> Tuple[int, int, int, int, int, int]:
 
     info("Combining tracefiles.")
 
-    total_trace: Dict[str, Dict[str, object]] = None
+    total_trace: InfoData = None
     for tracefile in args.add_tracefile:
         current = read_info_file(tracefile)
-        total_trace = current if total_trace is None else combine_info_files(total_trace, current)
+        total_trace = (current if total_trace is None
+                       else combine_info_files(total_trace, current))
 
     # Write combined data
     if not data_to_stdout:
@@ -1788,7 +1789,7 @@ def add_traces() -> Tuple[int, int, int, int, int, int]:
     return result
 
 
-def write_info_file(fhandle, data: Dict[str, Dict[str, object]]) -> Tuple[int, int, int, int, int, int]:
+def write_info_file(fhandle, info_data: InfoData) -> Tuple[int, int, int, int, int, int]:
     """ """
     global args
 
@@ -1799,8 +1800,8 @@ def write_info_file(fhandle, data: Dict[str, Dict[str, object]]) -> Tuple[int, i
     br_total_found = 0
     br_total_hit   = 0
 
-    for source_file in sorted(data.keys()):
-        entry = data[source_file]
+    for source_file in sorted(info_data.keys()):
+        entry = info_data[source_file]
 
         (testdata,    sumcount, funcdata, checkdata,
          testfncdata, sumfnccount,
@@ -1880,10 +1881,10 @@ def extract() -> Tuple[int, int, int, int, int, int]:
     global args
     global data_to_stdout
 
-    data: Dict[str, Dict[str, object]] = read_info_file(args.extract)
+    data: InfoData = read_info_file(args.extract)
 
     # Need perlreg expressions instead of shell pattern
-    pattern_list: List[str] = [transform_pattern(elem) for elem in @ARGV] # NOK
+    pattern_list: List[str] = [transform_pattern(elem) for elem in args.ARGV]
 
     # Filter out files which do not match any pattern
     extracted = 0
@@ -1919,10 +1920,10 @@ def remove() -> Tuple[int, int, int, int, int, int]:
     global args
     global data_to_stdout
 
-    data: Dict[str, Dict[str, object]] = read_info_file(args.remove)
+    data: InfoData = read_info_file(args.remove)
 
     # Need perlreg expressions instead of shell pattern
-    pattern_list: List[str] = [transform_pattern(elem) for elem in @ARGV] # NOK
+    pattern_list: List[str] = [transform_pattern(elem) for elem in args.ARGV]
 
     removed = 0
     # Filter out files that match the pattern
@@ -2018,7 +2019,7 @@ def listing():
     fwidth_narrow = (5, 5, 3, 5, 4, 5)
     fwidth_wide   = (6, 5, 5, 5, 6, 5)
 
-    data: Dict[str, Dict[str, object]] = read_info_file(args.list)
+    data: InfoData = read_info_file(args.list)
 
     fwidth = fwidth_wide
 
@@ -2263,8 +2264,8 @@ def strip_directories(path: str, depth: Optional[int] = None) -> str:
     return path
 
 
-def apply_diff_to_brcount(brcount:  Dict[int, str],
-                          linedata: Dict[int, int]) -> Tuple[Dict[int, str], int, int]:
+def apply_diff_to_brcount(brcount:  BranchCountData,
+                          linedata: Dict[int, int]) -> Tuple[BranchCountData, int, int]:
     """Adjust line numbers of branch coverage data according to linedata.
 
     Convert brcount to db format
@@ -2307,8 +2308,8 @@ def diff() -> Tuple[int, int, int, int, int, int]:
     global args
     global data_to_stdout
 
-    trace_data: Dict[str, Dict[str, object]] = read_info_file(args.diff)
-    diff_data, path_data = read_diff(Path($ARGV[0])) # NOK
+    trace_data: InfoData = read_info_file(args.diff)
+    diff_data, path_data = read_diff(Path(args.ARGV[0]))
 
     path_conversion_data: Dict[str, str] = {}
     unchanged = 0
@@ -2322,14 +2323,14 @@ def diff() -> Tuple[int, int, int, int, int, int]:
             unchanged += 1
             continue
 
-        line_hash, old_path, new_path = line_hash_result
+        line_data, old_path, new_path = line_hash_result
 
         converted += 1
         if old_path and new_path and old_path != new_path:
             path_conversion_data[old_path] = new_path
 
         # Check for deleted files
-        if len(line_hash) == 0:
+        if len(line_data) == 0:
             info(f"Removing {filename}")
             del trace_data[filename]
             continue
@@ -2343,9 +2344,9 @@ def diff() -> Tuple[int, int, int, int, int, int]:
         # Convert test data
         for testname in list(testdata.keys()):
             # Adjust line numbers of line coverage data
-            testdata[testname] = apply_diff(testdata[testname], line_hash)
+            testdata[testname] = apply_diff(testdata[testname], line_data)
             # Adjust line numbers of branch coverage data
-            testbrdata[testname] = apply_diff_to_brcount(testbrdata[testname], line_hash)
+            testbrdata[testname] = apply_diff_to_brcount(testbrdata[testname], line_data)
             # Remove empty sets of test data
             if len(testdata[testname]) == 0:
                 del testdata[testname]
@@ -2385,14 +2386,14 @@ def diff() -> Tuple[int, int, int, int, int, int]:
             del testbrdata[testname]
 
         # Convert summary of test data
-        sumcount = apply_diff(sumcount, line_hash)
+        sumcount = apply_diff(sumcount, line_data)
         # Convert function data
-        funcdata = apply_diff_to_funcdata(funcdata, line_hash)
+        funcdata = apply_diff_to_funcdata(funcdata, line_data)
         # Convert branch coverage data
-        sumbrcount = apply_diff_to_brcount(sumbrcount, line_hash)
+        sumbrcount = apply_diff_to_brcount(sumbrcount, line_data)
         # Update found/hit numbers
         # Convert checksum data
-        checkdata = apply_diff(checkdata, line_hash)
+        checkdata = apply_diff(checkdata, line_data)
         # Convert function call count data
         adjust_fncdata(funcdata, testfncdata, sumfnccount)
         fn_found, fn_hit = get_func_found_and_hit(sumfnccount)
@@ -2446,7 +2447,7 @@ def read_diff(diff_file: Path) -> Tuple[Dict[str, Dict[int, int]], Dict[str, str
 
       (mapping, path mapping)
 
-      mapping:   filename -> reference to line hash
+      mapping:   filename -> line hash
       line hash: line number in new file -> corresponding line number in old file
 
       path mapping:  filename -> old filename
@@ -2578,7 +2579,7 @@ def read_diff(diff_file: Path) -> Tuple[Dict[str, Dict[int, int]], Dict[str, str
 
     return (diff, paths)
 
-# NOK
+
 def get_line_hash(filename: str,
                   diff_data: Dict[str, Dict[int, int]],
                   path_data: Dict[str, str]) -> Optional[Tuple[Dict[int, int], str, str]]:
@@ -2588,30 +2589,30 @@ def get_line_hash(filename: str,
     """
     global args
     # Remove trailing slash from diff path
-    diff_path = re.sub("\/$", "", args.diff_path) # ???
+    diff_path = re.sub(r"/$", "", args.diff_path)
 
     diff_name = None
-    for $_ in diff_data.keys():
-        sep = "/" if ! /^\// else ""
+    for fname in diff_data.keys():
+        sep = "" if re.match(r"^/", fname) else "/"
         # Try to match diff filename with filename
-        if re.match(rf"^\Q{diff_path}{sep}{$_}\E$", filename):
+        if re.match(rf"^\Q{diff_path}{sep}{fname}\E$", filename):
             if diff_name:
                 # Two files match, choose the more specific one
                 # (the one with more path components)
-                $old_depth = (diff_name =~ tr/\///);
-                $new_depth = (tr/\///);
+                $old_depth = (diff_name =~ tr/\///); # NOK
+                $new_depth = (tr/\///);              # NOK
                 if old_depth == new_depth:
                     die(f"ERROR: diff file contains ambiguous entries for {filename}")
                 elif new_depth > old_depth:
-                    diff_name = $_
+                    diff_name = fname
             else:
-                diff_name = $_
+                diff_name = fname
 
     if not diff_name:
         return None
 
-    old_path: Optionl[str] = None
-    new_path: Optionl[str] = None
+    old_path: Optional[str] = None
+    new_path: Optional[str] = None
     # Get converted path
     match = re.match(rf"^(.*){diff_name}$", filename)
     if match:
@@ -2620,47 +2621,48 @@ def get_line_hash(filename: str,
     return (diff_data[diff_name], old_path, new_path)
 
 
-def convert_paths(trace_data: Dict[str, ???], path_conversion_data: Dict[str, str]): # NOK
-    """Rename all paths in TRACE_DATA which show up in path_conversion_data."""
+def convert_paths(info_data: InfoData, path_conversion_data: Dict[str, str]):
+    """Rename all paths in info_data which show up in path_conversion_data."""
 
     if len(path_conversion_data) == 0:
         info("No path conversion data available.")
         return
 
     # Expand path conversion list
-    for filename in list(path_conversion_data.keys()):
-        new_path = path_conversion_data[filename]
-        while (($filename =~ s/^(.*)\/[^\/]+$/\1/) and # NOK
-               ($new_path =~ s/^(.*)\/[^\/]+$/\1/) and # NOK
-               filename != new_path):
-            path_conversion_data[filename] = new_path
+    for path in list(path_conversion_data.keys()):
+        new_path = path_conversion_data[path]
+        while True:
+            path     = re.sub(r"^(.*)/[^/]+$", r"\1", path)
+            new_path = re.sub(r"^(.*)/[^/]+$", r"\1", new_path)
+            if not path or not new_path or path == new_path:
+                break
+            path_conversion_data[path] = new_path
 
     # Adjust paths
     repeat = True
     while repeat:
         repeat = False
-        for filename in list(trace_data.keys()):
+        for filename in list(info_data.keys()):
             # Find a path in our conversion table that matches, starting
             # with the longest path
-            for $_ in sorted({length($b) <=> length($a)} path_conversion_data.keys()): # NOK
+            for path in sorted({length($b) <=> length($a)} path_conversion_data.keys()): # NOK
                 # Is this path a prefix of our filename? Skip if not
-                match = re.match(rf"^$_(.*)$", filename)
+                match = re.match(rf"^{path}(.*)$", filename)
                 if not match: continue
-
-                new_path = path_conversion_data[$_] + match.group(1) # NOK
+                new_path = path_conversion_data[path] + match.group(1)
 
                 # Make sure not to overwrite an existing entry under
                 # that path name
-                if new_path in trace_data:
+                if new_path in info_data:
                     # Need to combine entries
-                    trace_data[new_path] = combine_info_entries(trace_data[filename],
-                                                                trace_data[new_path],
-                                                                filename)
+                    info_data[new_path] = combine_info_entries(info_data[filename],
+                                                               info_data[new_path],
+                                                               filename)
                 else:
                     # Simply rename entry
-                    trace_data[new_path] = trace_data[filename]
+                    info_data[new_path] = info_data[filename]
 
-                del trace_data[filename]
+                del info_data[filename]
                 repeat = True
                 break
             if repeat: break
@@ -2729,11 +2731,12 @@ def summary() -> Tuple[int, int, int, int, int, int]:
     """ """
     global args
 
-    total: Dict[str, Dict[str, object]] = None
+    total: InfoData = None
     # Read and combine trace files
     for filename in args.summary:
         current = read_info_file(filename)
-        total = current if total is None else combine_info_files(total, current)
+        total = (current if total is None
+                 else combine_info_files(total, current))
 
     ln_total_found = 0
     ln_total_hit   = 0
@@ -2797,7 +2800,7 @@ def get_func_found_and_hit(sumfnccount: Dict[object, int]) -> Tuple[int, int]:
     return (fn_found, fn_hit)
 
 
-def get_branch_found_and_hit(brcount: Dict[int, str]) -> Tuple[int, int]:
+def get_branch_found_and_hit(brcount: BranchCountData) -> Tuple[int, int]:
     """ """
     db = brcount_to_db(brcount)
     return brcount_db_get_found_and_hit(db)

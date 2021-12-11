@@ -190,7 +190,7 @@ def parse_ignore_errors(ignore_errors: Optional[List], ignore: Dict[int, bool]):
         ignore[item_id] = True
 
 
-def strip_spaces_in_options(opt_dict: Dict):
+def strip_spaces_in_options(opt_dict: Dict[str, str]):
     """Remove spaces around options"""
     return {key.strip(): value.strip() for key, value in opt_dict.items()}
 

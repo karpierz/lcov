@@ -3,34 +3,11 @@
 - Last changes: 2019-02-28                      -
 -------------------------------------------------
 
-Description
------------
-  LCOV is an extension of GCOV, a GNU tool which provides information about
-  what parts of a program are actually executed (i.e. "covered") while running
-  a particular test case. The extension consists of a set of Perl scripts
-  which build on the textual GCOV output to implement the following enhanced
-  functionality:
-
-    * HTML based output: coverage rates are additionally indicated using bar
-      graphs and specific colors.
-
-    * Support for large projects: overview pages allow quick browsing of
-      coverage data by providing three levels of detail: directory view,
-      file view and source code view.
-
-  LCOV was initially designed to support Linux kernel coverage measurements,
-  but works as well for coverage measurements on standard user space
-  applications.
-
-
 Further README contents
 -----------------------
   1. Included files
-  2. Installing LCOV
   3. An example of how to access kernel coverage data
   4. An example of how to access coverage data for a user space program
-  5. Questions and Comments
-
 
 
 1. Important files
@@ -46,26 +23,6 @@ Further README contents
   man                - Directory containing man pages for included tools
   example            - Directory containing an example to demonstrate LCOV
   lcovrc             - LCOV configuration file
-  Makefile           - Makefile providing 'install' and 'uninstall' targets
-
-
-2. Installing LCOV
-------------------
-The LCOV package is available as either RPM or tarball from:
-     
-  http://ltp.sourceforge.net/coverage/lcov.php
-
-To install the tarball, unpack it to a directory and run:
-
-  make install
-
-Use Git for the most recent (but possibly unstable) version:
-
-  git clone https://github.com/linux-test-project/lcov.git
-
-Change to the resulting lcov directory and type:
-
-  make install
 
 
 3. An example of how to access kernel coverage data
@@ -124,12 +81,3 @@ point to the directory in which the application was compiled.
 
 For further information on the gcc profiling mechanism, please also
 consult the gcov man page.
-
-
-5. Questions and comments
--------------------------
-See the included man pages for more information on how to use the LCOV tools.
-
-Please email further questions or comments regarding this tool to the
-LTP Mailing list at ltp-coverage@lists.sourceforge.net  
-

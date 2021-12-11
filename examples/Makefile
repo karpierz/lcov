@@ -10,10 +10,10 @@
 CC      := gcc
 CFLAGS  := -Wall -I. -fprofile-arcs -ftest-coverage
 
-LCOV    := ../bin/lcov
-GENHTML := ../bin/genhtml
-GENDESC := ../bin/gendesc
-GENPNG  := ../bin/genpng
+LCOV    := python -m lcov.lcov
+GENHTML := python -m lcov.genhtml
+GENDESC := python -m lcov.gendesc
+GENPNG  := python -m lcov.genpng
 
 # Depending on the presence of the GD.pm perl module, we can use the
 # special option '--frames' for genhtml
